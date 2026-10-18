@@ -1,0 +1,10 @@
+{
+  "overrides": [
+    {
+      "files": "checks/*.js",
+      "options": {
+        "semi": false
+      }
+    }
+  ]
+}

@@ -1,0 +1,323 @@
+{
+  "order-check": [
+    {
+      "mode": "archive",
+      "samples": [
+        {
+          "order": false,
+          "pre": false,
+          "difference": {
+            "channels": 0,
+            "total": 0,
+            "max": 0
+          },
+          "cpu": 2.800000000745058,
+          "gpu": 40.10456,
+          "calls": 98,
+          "triangles": 4230935
+        },
+        {
+          "order": true,
+          "pre": false,
+          "difference": {
+            "channels": 65558,
+            "total": 68259,
+            "max": 2
+          },
+          "cpu": 2.899999998509884,
+          "gpu": 32.21232,
+          "calls": 98,
+          "triangles": 4230935
+        },
+        {
+          "order": true,
+          "pre": true,
+          "difference": {
+            "channels": 65558,
+            "total": 68259,
+            "max": 2
+          },
+          "cpu": 2.600000001490116,
+          "gpu": 30.55476,
+          "calls": 103,
+          "triangles": 5192735
+        }
+      ]
+    },
+    {
+      "mode": "detail",
+      "samples": [
+        {
+          "order": false,
+          "pre": false,
+          "difference": {
+            "channels": 0,
+            "total": 0,
+            "max": 0
+          },
+          "cpu": 2.5,
+          "gpu": 54.51196,
+          "calls": 98,
+          "triangles": 2882491
+        },
+        {
+          "order": true,
+          "pre": false,
+          "difference": {
+            "channels": 0,
+            "total": 0,
+            "max": 0
+          },
+          "cpu": 2.400000002235174,
+          "gpu": 30.77008,
+          "calls": 98,
+          "triangles": 2882491
+        },
+        {
+          "order": true,
+          "pre": true,
+          "difference": {
+            "channels": 0,
+            "total": 0,
+            "max": 0
+          },
+          "cpu": 2.399999998509884,
+          "gpu": 29.54864,
+          "calls": 103,
+          "triangles": 3512491
+        }
+      ]
+    }
+  ],
+  "rendering-regression": [
+    {
+      "scenario": "archive",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [5, 249]
+    },
+    {
+      "scenario": "detail",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [5, 239]
+    },
+    {
+      "scenario": "inspect",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [5, 237]
+    },
+    {
+      "scenario": "switch",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [104, 242]
+    },
+    {
+      "scenario": "dark",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [13, 239]
+    },
+    {
+      "scenario": "half-ao",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [4, 248]
+    },
+    {
+      "scenario": "no-ao",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [5, 249]
+    },
+    {
+      "scenario": "smaa",
+      "channels": 0,
+      "max": 0,
+      "mean": 0,
+      "rms": 0,
+      "pixels": 1306000,
+      "rgbRange": [4, 247]
+    }
+  ],
+  "performance-regression": {
+    "checks": [
+      "No 3D draws behind directory",
+      "Search responds with background paused",
+      "3D resumes after dialog closes",
+      "No 3D draws while reading",
+      "3D resumes after reading",
+      "Explicit smooth preset applied",
+      "Original lighting restored",
+      "Low-FPS extraction follows elapsed time"
+    ],
+    "smooth": {
+      "fps": 22.535211267605632,
+      "quality": {
+        "ratio": 0.8,
+        "width": 533,
+        "height": 696,
+        "limited": false,
+        "antialias": "off",
+        "transmission": 0.5,
+        "anisotropy": 4,
+        "superPerformance": false,
+        "aoSamples": 0,
+        "aoWidth": 266,
+        "aoHeight": 348,
+        "shadows": 1024,
+        "depthOfField": 0
+      },
+      "returningFiles": 5
+    },
+    "timing": [
+      {
+        "limit": 0.05,
+        "extraction": 3.016,
+        "cameraDetail": 0.507
+      },
+      {
+        "limit": 0.25,
+        "extraction": 4.001,
+        "cameraDetail": 0.964
+      }
+    ]
+  },
+  "runtime-comparison": [
+    {
+      "variant": "baseline",
+      "gpu": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": {
+        "ratio": 1.5,
+        "width": 1000,
+        "height": 1306,
+        "limited": false,
+        "antialias": "off",
+        "transmission": 1,
+        "anisotropy": 16,
+        "superPerformance": false,
+        "aoSamples": 32,
+        "aoWidth": 1000,
+        "aoHeight": 1306,
+        "shadows": 2048,
+        "depthOfField": 100
+      },
+      "idle": {
+        "fps": 11.68623874130658,
+        "frameP95Ms": 108.59999999999945
+      },
+      "navigating": {
+        "fps": 8.731902428032225,
+        "frameP95Ms": 233.39999999999964,
+        "returningFiles": 8
+      }
+    },
+    {
+      "variant": "1",
+      "gpu": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": {
+        "ratio": 1.5,
+        "width": 1000,
+        "height": 1306,
+        "limited": false,
+        "antialias": "off",
+        "transmission": 1,
+        "anisotropy": 16,
+        "superPerformance": false,
+        "aoSamples": 32,
+        "aoWidth": 1000,
+        "aoHeight": 1306,
+        "shadows": 2048,
+        "depthOfField": 100
+      },
+      "idle": {
+        "fps": 14.285306134110455,
+        "frameP95Ms": 100.5
+      },
+      "navigating": {
+        "fps": 10.496453900709223,
+        "frameP95Ms": 241.8000000000011,
+        "returningFiles": 5
+      }
+    },
+    {
+      "variant": "baseline",
+      "gpu": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": {
+        "ratio": 1.5,
+        "width": 1000,
+        "height": 1306,
+        "limited": false,
+        "antialias": "off",
+        "transmission": 1,
+        "anisotropy": 16,
+        "superPerformance": false,
+        "aoSamples": 32,
+        "aoWidth": 1000,
+        "aoHeight": 1306,
+        "shadows": 2048,
+        "depthOfField": 100
+      },
+      "idle": {
+        "fps": 12.112334863806655,
+        "frameP95Ms": 108.40000000000055
+      },
+      "navigating": {
+        "fps": 8.530482256596908,
+        "frameP95Ms": 225.10000000000036,
+        "returningFiles": 8
+      }
+    },
+    {
+      "variant": "1",
+      "gpu": "ANGLE (AMD, AMD Radeon(TM) Graphics (0x00001638) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "quality": {
+        "ratio": 1.5,
+        "width": 1000,
+        "height": 1306,
+        "limited": false,
+        "antialias": "off",
+        "transmission": 1,
+        "anisotropy": 16,
+        "superPerformance": false,
+        "aoSamples": 32,
+        "aoWidth": 1000,
+        "aoHeight": 1306,
+        "shadows": 2048,
+        "depthOfField": 100
+      },
+      "idle": {
+        "fps": 13.770233812949643,
+        "frameP95Ms": 108.19999999999982
+      },
+      "navigating": {
+        "fps": 10.545817300840818,
+        "frameP95Ms": 208.5,
+        "returningFiles": 5
+      }
+    }
+  ]
+}

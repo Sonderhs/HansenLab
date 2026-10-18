@@ -1,0 +1,32 @@
+{
+  "name": "hansen-lab",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "postinstall": "node scripts/patch-rolling-number.mjs",
+    "dev": "vite",
+    "check": "tsc --noEmit",
+    "build": "npm run check && vite build",
+    "preview": "vite preview --host 127.0.0.1",
+    "format": "prettier --write src scripts checks index.html vite.config.ts package.json tsconfig.json"
+  },
+  "dependencies": {
+    "@kitlangton/rolling-number": "0.4.1",
+    "three": "0.183.2"
+  },
+  "devDependencies": {
+    "@types/three": "0.183.1",
+    "prettier": "3.9.6",
+    "typescript": "5.9.3",
+    "vite": "7.3.6"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sonderhs/HansenLab.git"
+  }
+}

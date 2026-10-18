@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.tools/
+.playwright-cli/
+output/playwright/
+art/.cache/
+*.blend1
+*.pyc
+__pycache__/
+.env
+.env.*
+!.env.example
+public/fonts/novecento/
