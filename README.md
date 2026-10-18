@@ -6,6 +6,8 @@ GitHub 私有仓库：[Sonderhs/HansenLab](https://github.com/Sonderhs/HansenLab
 
 首页保留可拖动的三维玻璃档案阵列；文章使用独立阅读界面，提供目录、代码复制、阅读进度与下一篇。支持文章搜索、分类筛选、键盘导航和手机布局。
 
+![Hansen Lab 三维玻璃档案首页预览](docs/images/homepage.png)
+
 ## 本地运行
 
 需要 Node.js 22.12 或以上版本（已使用 Node.js 24 验证）。
