@@ -65,7 +65,7 @@ $("#app").innerHTML = `
     <div class="lane-controls"><button data-action="lane-prev" aria-label="上一分类">←</button><div><span class="eyebrow" id="lane-number"></span><strong id="lane-title"></strong><button class="collection-open" data-action="collection">查看该集合 ↗</button></div><button data-action="lane-next" aria-label="下一分类">→</button></div>
     <div class="row-controls"><button data-action="row-prev" aria-label="上一篇">↑</button><div id="ticks"></div><button data-action="row-next" aria-label="下一篇">↓</button></div>
     <div class="browse-hint">拖动探索 <span>／</span> 滚轮切换 <span>／</span> <kbd>↵</kbd> 打开记录</div>
-    <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
+    <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="boot-sound" id="boot-sound" aria-pressed="false" title="开场音效偏好；点击重播开场试听">音效 关</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
     <div id="hover" hidden></div>
     <div id="loading" role="status" hidden><span>${mark}</span><b>HANSEN LAB</b><p>正在连接三维档案库…</p><i></i><button data-action="index">先浏览文章目录 →</button></div>
   </div>
@@ -277,6 +277,7 @@ document.addEventListener("click", async (event) => {
     pauseScene();
     boot.replay();
   }
+  if (action === "boot-sound") boot.toggleSoundPreference();
   if (action === "index") showIndex();
   if (action === "projects")
     showIndex({ collection: "projects", view: "series" });
@@ -531,6 +532,7 @@ async function init() {
       Object.assign(window, {
         hansenProfile: {
           scene,
+          bootAudio: boot.audio,
           pause: pauseScene,
           resume: resumeScene,
         },

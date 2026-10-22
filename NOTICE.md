@@ -4,7 +4,7 @@
 
 Hansen Lab 源自 [LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)，原项目 Copyright (c) 2026 LBEILC，代码许可见 LICENSE。提取基线提交 12cc5e4013acb9408f753ff71de6b8492299b7c8，并包含 2026-10-18 的 Hansen Lab 实验工作区改动。此仓库以新的 Git 历史独立维护，源文件原路径及提取前 SHA-256 见 docs/SOURCE-MANIFEST.json。
 
-复用范围：Three.js 场景与交互、玻璃档案及拆解模型、Blender 工程和生成脚本、字体加载、文字测量补丁。新增个人品牌、博客页面、文章阅读、示例内容及性能适配。原项目场景以《明日方舟》莱茵生命相关参考画面为视觉来源，原参考视频：https://www.bilibili.com/video/BV1rr4y1b7sz/ 。原作品及相关标识权利归其权利人；MIT 许可不改变第三方素材的权利。模型内仍保留原场景的 RHINE LAB 浮雕，此版本未修改模型几何。参考视频、音频与 Novecento 授权字体未包含在此仓库。
+复用范围：Three.js 场景与交互、玻璃档案及拆解模型、Blender 工程和生成脚本、字体加载、文字测量补丁。新增个人品牌、博客页面、文章阅读、示例内容及性能适配。原项目场景以《明日方舟》莱茵生命相关参考画面为视觉来源，原参考视频：https://www.bilibili.com/video/BV1rr4y1b7sz/ 。原作品及相关标识权利归其权利人；MIT 许可不改变第三方素材的权利。模型内仍保留原场景的 RHINE LAB 浮雕，此版本未修改模型几何。参考视频、完整原片音轨与 Novecento 授权字体未包含在此仓库。开场打字短音的单独来源见下文。
 
 ## 字体与依赖
 
@@ -18,4 +18,8 @@ art/rhine-archive.blend 与 art/archive-assembly.blend 对应 public/assets/ 的
 
 ## Hansen Lab 开场（2026-10-22）
 
-复用 RhineLabUI 的 boot-motion.ts、boot-tracks.ts、boot-orbit-tracks.ts、boot-logo-tracks.ts，保留逐帧测量轨迹。Hansen 的 DOM/SVG 渲染、品牌笔画、真实加载衔接、跳过与重播单独实现。开场文字使用已随项目分发的 MiSans；未复制 BootLettering、Novecento 或原片音频。新增来源哈希记录于 docs/SOURCE-MANIFEST.json。
+复用 RhineLabUI 的 boot-motion.ts、boot-tracks.ts、boot-orbit-tracks.ts、boot-logo-tracks.ts，保留逐帧测量轨迹。Hansen 的 DOM/SVG 渲染、品牌笔画、真实加载衔接、跳过与重播单独实现。开场文字使用已随项目分发的 MiSans；未复制 BootLettering 或 Novecento。本次后续接入的音效见下文。新增来源哈希记录于 docs/SOURCE-MANIFEST.json。
+
+## Hansen Lab 开场音效（2026-10-22）
+
+依据用户要求复用 RhineLabUI 的 Web Audio 合成器、开场提示时刻和逐字节奏；提取前哈希见 docs/SOURCE-MANIFEST.json。打字声复用其三个各 38ms 的参考短音，来自《明日方舟》特别映像 [莱茵生命：访问]，原作者权利保留，不纳入 MIT；精确剪切与处理见 public/audio/typing-source.json。未复制完整音轨。没有引入原项目的背景音乐或全局交互声音。

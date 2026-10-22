@@ -8,7 +8,7 @@ async (page) => {
   const footer=await page.locator('.display-controls').evaluate(el=>{
     const r=el.getBoundingClientRect();return {left:r.left,right:r.right,overlap:r.left<document.querySelector('.home-footer > span').getBoundingClientRect().right}
   })
-  check(footer.left>=0&&footer.right<=320&&!footer.overlap,'All three footer controls fit at 320px')
+  check(footer.left>=0&&footer.right<=320&&!footer.overlap,'All footer controls fit at 320px')
   await page.screenshot({path:'output/playwright/hansen/boot-mobile-home.png'})
   await page.emulateMedia({reducedMotion:'no-preference'})
   await page.getByRole('button',{name:'重播开场',exact:true}).click()

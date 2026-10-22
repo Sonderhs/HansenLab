@@ -336,3 +336,35 @@
     transition: none;
   }
 }
+
+.intro-load-info {
+  display: grid;
+  gap: 5px;
+}
+.intro-load-info small {
+  font-size: 10px;
+  color: var(--muted);
+}
+.intro-controls nav {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 24px;
+}
+@media (max-width: 600px) {
+  .intro-controls nav {
+    justify-content: space-between;
+    gap: 0 15px;
+  }
+  .intro-controls [data-intro-sound] {
+    flex-basis: 100%;
+    text-align: left;
+  }
+  .display-controls {
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .home-footer > span:first-child {
+    flex: none;
+  }
+}

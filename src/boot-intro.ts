@@ -1,5 +1,6 @@
 import { bootMotion, progress, smooth } from "./boot-motion";
 import "./boot-intro.css";
+import { BootAudio } from "./boot-audio";
 
 // Reuse RhineLabUI's measured motion tracks; the DOM and monogram belong to Hansen Lab.
 const START = 1.76;
@@ -22,6 +23,8 @@ const monogram = `<svg viewBox="0 0 310 220" fill="none" aria-hidden="true"><g s
 
 export class BlogBoot {
   readonly element: HTMLElement;
+  readonly audio = new BootAudio();
+  private playbackId = 0;
   private elapsed = 0;
   private last = 0;
   private frame = 0;
@@ -62,7 +65,7 @@ export class BlogBoot {
         <div class="intro-powered">POWERED BY <b>HANSEN LAB</b><i></i></div>
       </div>
       <div class="intro-static" aria-hidden="true">${monogram}<strong>HANSEN LAB</strong><span>个人研究与实践档案</span></div>
-      <footer class="intro-controls"><div><span class="intro-indicator" aria-hidden="true"></span><p role="status" aria-live="polite">正在准备三维档案…</p></div><nav aria-label="开场操作"><button data-intro-retry hidden>重新载入</button><button data-intro-browse>先浏览文章目录</button><button data-intro-skip>跳过开场 <span aria-hidden="true">↗</span></button></nav></footer>`;
+      <footer class="intro-controls"><div><span class="intro-indicator" aria-hidden="true"></span><div class="intro-load-info"><p role="status" aria-live="polite">正在准备三维档案…</p><small data-intro-audio-note aria-live="polite">音效需点击开启</small></div></div><nav aria-label="开场操作"><button data-intro-sound aria-pressed="false">开启音效并重播</button><button data-intro-retry hidden>重新载入</button><button data-intro-browse>先浏览文章目录</button><button data-intro-skip>跳过开场 <span aria-hidden="true">↗</span></button></nav></footer>`;
     host.append(this.element);
     this.stage = this.find(".intro-stage");
     this.status = this.find('[role="status"]');
@@ -101,19 +104,71 @@ export class BlogBoot {
       () => location.reload(),
       { signal },
     );
+    this.find("[data-intro-sound]").addEventListener(
+      "click",
+      () => {
+        if (this.audio.playing) {
+          this.audio.setEnabled(false);
+          this.updateSoundControl();
+        } else {
+          this.audio.setEnabled(true);
+          this.replay();
+        }
+      },
+      { signal },
+    );
     window.addEventListener("resize", () => this.resize(), { signal });
     document.addEventListener(
       "visibilitychange",
       () => {
         this.stop();
-        if (!document.hidden) this.schedule();
+        if (document.hidden) this.audio.stop();
+        else if (
+          !this.finished &&
+          !this.closing &&
+          !this.skipped &&
+          !this.failed &&
+          !this.reduced
+        ) {
+          void this.audio.resume().then(() => this.updateSoundControl());
+          this.schedule();
+        }
       },
       { signal },
     );
     this.resize();
     this.element.dataset.reduced = String(this.reduced);
     this.render(START);
+    this.updateSoundControl();
     this.schedule();
+  }
+  toggleSoundPreference() {
+    this.audio.setEnabled(!this.audio.enabled);
+    this.updateSoundControl();
+  }
+  private updateSoundControl() {
+    const playing = this.audio.playing;
+    const button = this.find<HTMLButtonElement>("[data-intro-sound]");
+    button.setAttribute("aria-pressed", String(playing));
+    button.textContent = playing
+      ? "音效 开"
+      : this.audio.stats().error
+        ? "重试音效并重播"
+        : "开启音效并重播";
+    button.hidden = this.reduced || this.failed || this.skipped;
+    this.find<HTMLElement>("[data-intro-audio-note]").textContent =
+      this.reduced || this.failed || this.skipped
+        ? ""
+        : playing
+          ? "原版开场音效 · 可点击静音"
+          : this.audio.stats().error
+            ? "声音暂不可用，仍可无声浏览"
+            : "音效需点击开启";
+    const homeButton = document.querySelector<HTMLButtonElement>("#boot-sound");
+    if (homeButton) {
+      homeButton.textContent = `音效 ${this.audio.enabled ? "开" : "关"}`;
+      homeButton.setAttribute("aria-pressed", String(this.audio.enabled));
+    }
   }
   private find<T extends Element = HTMLElement>(selector: string) {
     return this.element.querySelector<T>(selector)!;
@@ -146,11 +201,14 @@ export class BlogBoot {
     // Never reveal the homepage or claim completion until the actual scene is ready.
     if (!this.resourcesReady && this.elapsed >= HOLD) {
       this.elapsed = HOLD;
+      this.audio.stop();
+      this.updateSoundControl();
       this.render(START + HOLD);
       this.element.dataset.phase = "waiting";
       this.last = 0;
       return;
     }
+    this.audio.update(START + this.elapsed);
     this.render(START + this.elapsed);
     if (this.elapsed >= END) this.finish("home");
     else this.schedule();
@@ -259,10 +317,17 @@ export class BlogBoot {
     this.element.dataset.resources = "ready";
     if (this.finished || this.closing) return;
     if (this.reduced || this.skipped) this.finish("home");
-    else this.schedule();
+    else {
+      if (this.element.dataset.phase === "waiting")
+        void this.audio.resume().then(() => this.updateSoundControl());
+      this.schedule();
+    }
   }
   fail() {
     this.failed = true;
+    this.playbackId++;
+    this.audio.stop();
+    this.updateSoundControl();
     this.stop();
     this.element.dataset.resources = "failed";
     this.element.dataset.reduced = "true";
@@ -274,6 +339,9 @@ export class BlogBoot {
     if (this.closing || this.finished) return;
     if (this.failed) return this.browse();
     this.skipped = true;
+    this.playbackId++;
+    this.audio.stop();
+    this.updateSoundControl();
     this.stop();
     this.element.dataset.reduced = "true";
     this.element.dataset.phase = "waiting";
@@ -290,13 +358,18 @@ export class BlogBoot {
   setReduced(value: boolean) {
     this.reduced = value;
     this.element.dataset.reduced = String(value || this.skipped || this.failed);
+    this.updateSoundControl();
     if (value) {
+      this.playbackId++;
+      this.audio.stop();
       this.stop();
       if (this.resourcesReady) this.finish("home");
     } else this.schedule();
   }
   replay() {
+    const playback = ++this.playbackId;
     this.stop();
+    this.audio.reset();
     clearTimeout(this.fade);
     this.elapsed = 0;
     this.closing = this.finished = this.skipped = false;
@@ -306,14 +379,29 @@ export class BlogBoot {
     this.find("[data-intro-skip]").innerHTML =
       '跳过开场 <span aria-hidden="true">↗</span>';
     this.render(START);
+    this.updateSoundControl();
     if (this.reduced && this.resourcesReady) this.finish("home", true);
     else {
       this.find<HTMLElement>("[data-intro-skip]").focus();
-      this.schedule();
+      if (this.audio.enabled && !this.reduced && !this.failed) {
+        void this.audio.activate().then(() => {
+          if (
+            playback !== this.playbackId ||
+            this.finished ||
+            this.closing ||
+            this.skipped
+          )
+            return;
+          this.updateSoundControl();
+          this.schedule();
+        });
+      } else this.schedule();
     }
   }
   private finish(destination: Destination, immediate = false) {
     if (this.finished || this.closing) return;
+    this.playbackId++;
+    this.audio.stop();
     this.stop();
     this.closing = true;
     this.element.inert = true;
@@ -341,6 +429,8 @@ export class BlogBoot {
     else this.fade = setTimeout(reveal, 32);
   }
   dispose() {
+    this.playbackId++;
+    this.audio.dispose();
     this.stop();
     clearTimeout(this.fade);
     this.events.abort();

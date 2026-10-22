@@ -4102,6 +4102,41 @@
       "sha256": "3311a6cf99edefa4175ecd3d89c80f21a40f56551b9980fac4b1e17f5bb0df90",
       "extracted": "2026-10-22",
       "note": "Original motion tracks reused unchanged."
+    },
+    {
+      "source": "src/audio.ts",
+      "destination": "src/audio-synthesis.ts",
+      "sha256": "78b6a28604155e591b9f8e7f387a374a69a7760d4e45f613025433486f16ad00",
+      "extracted": "2026-10-22",
+      "note": "Extracted unchanged synthesis and cue definitions; no original music controller."
+    },
+    {
+      "source": "src/typing-rhythm.ts",
+      "destination": "src/typing-rhythm.ts",
+      "sha256": "8979413fd0e2cb47fe131b001e26d7a75282903b5022d022d3a74b3bb4cd6eab",
+      "extracted": "2026-10-22",
+      "note": "Opening typing sound reuse."
+    },
+    {
+      "source": "src/typing-samples.ts",
+      "destination": "src/typing-samples.ts",
+      "sha256": "dd161810def2b93eef62b2a34c39392b89cbc33f0f4a136b3e34660a5c1595dd",
+      "extracted": "2026-10-22",
+      "note": "Opening typing sound reuse."
+    },
+    {
+      "source": "public/audio/typing-source.json",
+      "destination": "public/audio/typing-source.json",
+      "sha256": "bce9d9bdf2b5b060bee054ec870b68231f9563db08ff8c867fed17ea41d99326",
+      "extracted": "2026-10-22",
+      "note": "Opening typing sound reuse."
+    },
+    {
+      "source": "scripts/extract-typing-audio.mjs",
+      "destination": "scripts/extract-typing-audio.mjs",
+      "sha256": "9b80363d1cb7e0e19b5837a97d8292430f4236cc4395773dc5ce262ec06101c4",
+      "extracted": "2026-10-22",
+      "note": "Opening typing sound reuse."
     }
   ]
 }
