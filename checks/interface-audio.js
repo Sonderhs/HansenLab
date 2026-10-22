@@ -1,0 +1,66 @@
+async(page)=>{
+ const checks=[],errors=[];
+ const check=(value,name)=>{if(!value)throw Error(name);checks.push(name)};
+ page.on('pageerror',error=>errors.push(String(error)));
+ await page.addInitScript(()=>{
+  const Native=AudioContext;window.audioProbe=[];
+  window.AudioContext=class extends Native{
+   constructor(...args){super(...args);const meter=this.createAnalyser();meter.fftSize=2048;const record={context:this,peak:0};audioProbe.push(record);const original=this.createDynamicsCompressor.bind(this);this.createDynamicsCompressor=()=>{const node=original(),connect=node.connect.bind(node);node.connect=destination=>{connect(meter);meter.connect(destination);return destination};return node};const data=new Float32Array(meter.fftSize);const tick=()=>{meter.getFloatTimeDomainData(data);record.peak=Math.max(record.peak,...data.map(Math.abs));requestAnimationFrame(tick)};requestAnimationFrame(tick)}
+  };
+ });
+ await page.emulateMedia({reducedMotion:'no-preference'});await page.setViewportSize({width:1600,height:900});
+ await page.goto('http://127.0.0.1:5175/?profile=1');await page.evaluate(()=>localStorage.setItem('hansen.boot-sound','off'));await page.reload();
+ await page.locator('[data-intro-skip]').click();await page.locator('#home[data-ready="true"]').waitFor();
+ const stats=()=>page.evaluate(()=>window.hansenProfile.audio.stats());
+ const count=async sound=>(await stats()).played[sound]??0;
+ await page.locator('[data-action="row-next"]').click();
+ check(await page.evaluate(()=>audioProbe.length===0),'Muted browsing creates no audio device');
+ await page.locator('#boot-sound').click();
+ await page.waitForFunction(()=>window.hansenProfile.audio.stats().played.confirm===1&&audioProbe[0].peak>0.00001);
+ check(await page.locator('#boot-sound').getAttribute('aria-pressed')==='true','Shared footer switch unlocks actual sound and gives one confirmation');
+ let before=await count('tick');await page.locator('[data-action="row-next"]').click();await page.waitForTimeout(140);
+ check(await count('tick')===before+1,'Button selection emits one glass sound');
+ before=await count('tick');await page.locator('[data-row][aria-pressed="true"]').click();
+ check(await count('tick')===before,'Selecting the current article does not repeat feedback');
+ await page.locator('.wordmark').focus();await page.keyboard.press('ArrowDown');await page.waitForTimeout(140);
+ check(await count('tick')===before+1,'Keyboard selection emits one glass sound');
+ before=await count('column');await page.locator('[data-action="lane-next"]').click();await page.waitForTimeout(140);
+ check(await count('column')===before+1,'Collection switching emits one column sound');
+ before=await count('tick');await page.mouse.move(430,450);await page.mouse.wheel(0,220);await page.waitForTimeout(400);
+ check(await count('tick')>before,'Wheel selection uses the same glass feedback');
+ const dragBefore=await stats();await page.mouse.move(450,470);await page.mouse.down();await page.mouse.move(1000,390,{steps:12});await page.mouse.up();await page.waitForTimeout(450);
+ const dragAfter=await stats();
+ check((dragAfter.played.tick??0)+(dragAfter.played.column??0)>(dragBefore.played.tick??0)+(dragBefore.played.column??0),'Free drag and inertia trigger feedback through actual selection');
+ await page.getByRole('link',{name:'打开这份记录'}).click();await page.locator('#reader').waitFor({state:'visible'});
+ check(await count('open')===1,'Opening an article emits one extraction sound');
+ await page.keyboard.press('Escape');await page.locator('#reader').waitFor({state:'hidden'});
+ check(await count('back')===1,'Returning to the array emits one return sound');
+ before=await count('page-open');await page.getByRole('button',{name:/文章目录/}).click();
+ check(await count('page-open')===before+1,'Directory opens with one electronic sound');
+ before=await count('ui-tick');await page.locator('[data-catalog-collection="ai"]').click();await page.waitForTimeout(140);
+ check(await count('ui-tick')===before+1,'Directory collection filter emits one UI feedback');
+ before=await count('ui-tick');await page.getByRole('combobox',{name:'按原分类筛选'}).selectOption('Agent');await page.waitForTimeout(140);
+ check(await count('ui-tick')===before+1,'Native category filter emits UI feedback');
+ before=await count('page-close');await page.keyboard.press('Escape');await page.waitForTimeout(140);
+ check(await count('page-close')===before+1,'Escape closes the dialog with one sound');
+ before=await count('confirm');await page.locator('#quality').click();await page.waitForTimeout(140);
+ check(await count('confirm')===before+1,'Quality setting confirms once');await page.locator('#quality').click();await page.waitForTimeout(140);
+ await page.locator('#motion').click();await page.waitForTimeout(140);
+ before=await count('tick');await page.locator('[data-action="row-next"]').click();await page.waitForTimeout(140);
+ check(await count('tick')===before+1,'Reduced motion keeps interface sound independent');await page.locator('#motion').click();await page.waitForTimeout(140);
+ await page.locator('#boot-sound').click();await page.waitForTimeout(100);
+ const muted=JSON.stringify((await stats()).played);await page.locator('[data-action="row-next"]').click();await page.getByRole('button',{name:/文章目录/}).click();await page.keyboard.press('Escape');
+ check(!(await stats()).enabled&&JSON.stringify((await stats()).played)===muted,'One mute switch silences both navigation and dialogs');
+ await page.locator('#boot-sound').click();await page.waitForTimeout(140);await page.reload();await page.locator('[data-intro-skip]').click();await page.locator('#home[data-ready="true"]').waitFor();
+ check(await page.evaluate(()=>audioProbe.length===0),'Saved enabled preference does not autoplay a fresh page');
+ await page.locator('[data-action="row-next"]').click();await page.waitForFunction(()=>window.hansenProfile.audio.stats().played.tick===1);
+ check(await page.evaluate(()=>audioProbe[0].context.state==='running'),'First trusted browse action restores saved sound without replaying the opening');
+ await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'))});await page.waitForTimeout(150);
+ check((await stats()).state==='suspended'&&(await stats()).voices===0,'Backgrounding stops interface voices and suspends audio');
+ await page.evaluate(()=>{delete document.hidden;document.dispatchEvent(new Event('visibilitychange'))});await page.locator('[data-action="row-next"]').click();await page.waitForTimeout(140);
+ check((await stats()).state==='running','Next interaction resumes audio after returning');
+ const counts=await stats();
+ await page.evaluate(()=>localStorage.setItem('hansen.boot-sound','off'));
+ check(errors.length===0,'No uncaught browser errors');
+ return {checks,counts,errors};
+}

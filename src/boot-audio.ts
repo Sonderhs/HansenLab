@@ -10,13 +10,15 @@ const readPreference = () => {
   }
 };
 
-/** Opening effects only. No music, global gesture listeners or interaction sounds. */
+/** Shared opening and interface effects. Gesture handling belongs to the app. */
 export class BootAudio {
   enabled = readPreference();
   private context?: AudioContext;
   private bus?: GainNode;
   private voices: ReturnType<typeof synthesizeSound>[] = [];
   private previous: number | null = null;
+  private interactionAllowed = false;
+  private interactionRequest = 0;
   private active = false;
   private disposed = false;
   private lastSound = new Map<Sound, number>();
@@ -94,10 +96,38 @@ export class BootAudio {
       clearTimeout(timeout);
     }
   }
+  allowInteractions() {
+    this.interactionAllowed = true;
+  }
+  interact(sound: Sound, pan = 0) {
+    if (
+      !this.interactionAllowed ||
+      !this.enabled ||
+      this.disposed ||
+      document.hidden
+    )
+      return;
+    if (this.playing) {
+      this.play(sound, pan);
+      return;
+    }
+    // Keep only the latest action while the device resumes; never queue a burst.
+    const request = ++this.interactionRequest;
+    void this.activate().then((unlocked) => {
+      if (
+        unlocked &&
+        request === this.interactionRequest &&
+        this.playing &&
+        !document.hidden
+      )
+        this.play(sound, pan);
+    });
+  }
   resume() {
     return this.context ? this.activate() : Promise.resolve(false);
   }
   reset() {
+    this.interactionRequest++;
     this.stopVoices();
     this.previous = null;
   }
@@ -131,15 +161,21 @@ export class BootAudio {
     }
     if (hasTypingBetween(previous, time)) this.play("key");
   }
-  private play(sound: Sound) {
+  private play(sound: Sound, pan = 0) {
+    if (!this.playing || document.hidden) return;
     const c = this.context!;
     const now = c.currentTime,
-      interval = sound === "key" ? 0.024 : 0.12;
+      interval =
+        sound === "key"
+          ? 0.024
+          : sound === "tick" || sound === "column"
+            ? 0.055
+            : 0.12;
     if (now - (this.lastSound.get(sound) ?? -Infinity) < interval) return;
     this.lastSound.set(sound, now);
     this.voices = this.voices.filter((voice) => voice.end > now);
     if (this.voices.length >= 10) this.voices.shift()!.stop(now);
-    this.voices.push(synthesizeSound(c, this.bus!, sound, now + 0.004));
+    this.voices.push(synthesizeSound(c, this.bus!, sound, now + 0.004, pan));
     this.played.set(sound, (this.played.get(sound) ?? 0) + 1);
   }
   stats() {

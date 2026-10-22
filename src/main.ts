@@ -1,5 +1,6 @@
 import { labelMarkSvg as labelMark } from "./brand";
 import { BlogBoot } from "./boot-intro";
+import type { Sound } from "./audio-synthesis";
 import "./fonts.css";
 import "@kitlangton/rolling-number/styles.css";
 import "./style.css";
@@ -65,7 +66,7 @@ $("#app").innerHTML = `
     <div class="lane-controls"><button data-action="lane-prev" aria-label="上一分类">←</button><div><span class="eyebrow" id="lane-number"></span><strong id="lane-title"></strong><button class="collection-open" data-action="collection">查看该集合 ↗</button></div><button data-action="lane-next" aria-label="下一分类">→</button></div>
     <div class="row-controls"><button data-action="row-prev" aria-label="上一篇">↑</button><div id="ticks"></div><button data-action="row-next" aria-label="下一篇">↓</button></div>
     <div class="browse-hint">拖动探索 <span>／</span> 滚轮切换 <span>／</span> <kbd>↵</kbd> 打开记录</div>
-    <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="boot-sound" id="boot-sound" aria-pressed="false" title="开场音效偏好；点击重播开场试听">音效 关</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
+    <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="boot-sound" id="boot-sound" aria-pressed="false" title="统一开启或关闭开场与浏览交互音效">音效 关</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
     <div id="hover" hidden></div>
     <div id="loading" role="status" hidden><span>${mark}</span><b>HANSEN LAB</b><p>正在连接三维档案库…</p><i></i><button data-action="index">先浏览文章目录 →</button></div>
   </div>
@@ -142,11 +143,27 @@ function syncSelection() {
     });
   $("#home").dataset.selected = post.slug;
 }
-function select(index: number, navigation?: ArchiveNavigation) {
+function playUi(sound: Sound, pan = 0) {
+  if (!bootActive) boot.audio.interact(sound, pan);
+}
+function select(
+  index: number,
+  navigation?: ArchiveNavigation,
+  feedback = true,
+) {
   if (index < 0 || index >= posts.length) return;
+  const previousLane = fileLocation(selected).lane;
+  const changed =
+    selected !== index || Boolean(navigation && "cell" in navigation);
   selected = index;
   scene?.select(index, navigation);
   syncSelection();
+  if (feedback && changed) {
+    const columnMove = fileLocation(index).lane !== previousLane;
+    const direction =
+      navigation && "direction" in navigation ? navigation.direction : 0;
+    playUi(columnMove ? "column" : "tick", columnMove ? direction * 0.45 : 0);
+  }
 }
 function navigate(axis: "lane" | "row", direction: number) {
   const { lane } = fileLocation(selected);
@@ -168,11 +185,13 @@ function closeDialogs() {
     .forEach((dialog) => dialog.close());
 }
 function openDialog(id: string) {
+  if ($<HTMLDialogElement>(id).open) return;
   drawerReturn = document.activeElement as HTMLElement;
   $("#hover").hidden = true;
   $("#home").inert = true;
   $("#reader").inert = true;
   $<HTMLDialogElement>(id).showModal();
+  playUi("page-open");
   if (!profileBaseline) pauseScene();
   if (id === "#index-dialog") $("#search").focus();
 }
@@ -189,6 +208,7 @@ document.querySelectorAll<HTMLDialogElement>("dialog").forEach((dialog) => {
     dialog.close();
   });
   dialog.addEventListener("close", () => {
+    playUi("page-close");
     $("#home").inert = reading || bootActive;
     $("#reader").inert = !reading;
     drawerReturn?.focus({ preventScroll: true });
@@ -217,6 +237,7 @@ function applyRoute() {
   if (index < 0) {
     if (!reading) return;
     reading = false;
+    playUi("back");
     $("#reader").hidden = true;
     $("#reader").inert = true;
     $("#home").inert = bootActive;
@@ -227,6 +248,7 @@ function applyRoute() {
     resumeScene();
     return;
   }
+  const wasReading = reading;
   if (!reading) articleReturn = document.activeElement as HTMLElement;
   reading = true;
   closeDialogs();
@@ -237,7 +259,8 @@ function applyRoute() {
   $("#home").classList.add("reading");
   const post = articles[index];
   const appearance = appearanceFor(post.slug, fileLocation(selected).lane);
-  if (appearance >= 0) select(appearance);
+  if (appearance >= 0) select(appearance, undefined, false);
+  playUi(wasReading ? "page-open" : "open");
   scene?.setMode("detail");
   readerScroll = 0;
   document.title = `${post.title} · Hansen Lab`;
@@ -293,12 +316,14 @@ document.addEventListener("click", async (event) => {
   if (action === "motion") {
     reduced = !reduced;
     syncMotion();
+    playUi("confirm");
   }
   if (action === "quality") {
     qualityMode = qualityMode === "original" ? "performance" : "original";
     scene?.setQuality({ ...qualityPresets[qualityMode] });
     $("#quality").textContent =
       `画质 ${qualityMode === "original" ? "原始" : "流畅"}`;
+    playUi("confirm");
   }
   if (action === "copy") {
     const text =
@@ -307,10 +332,17 @@ document.addEventListener("click", async (event) => {
     try {
       await navigator.clipboard.writeText(text);
       actionElement!.textContent = "已复制 ✓";
+      playUi("confirm");
     } catch {
       actionElement!.textContent = "请选中下方代码复制";
     }
   }
+  if (
+    target.closest(
+      "[data-catalog-view], [data-catalog-collection], [data-catalog-tag], [data-catalog-series], [data-catalog-reset], [data-catalog-clear], [data-section]",
+    )
+  )
+    playUi("ui-tick");
   const tag = target.closest<HTMLElement>("[data-read-tag]")?.dataset.readTag;
   if (tag) showIndex({ tag });
   const category = target.closest<HTMLElement>("[data-read-category]")?.dataset
@@ -333,6 +365,30 @@ document.addEventListener("click", async (event) => {
   const postLink = target.closest<HTMLAnchorElement>('a[href^="#post/"]');
   if (postLink) closeDialogs();
 });
+document.addEventListener("change", (event) => {
+  if ((event.target as Element).matches("#category-filter, #sort-filter"))
+    playUi("ui-tick");
+});
+
+// Unlock only from a trusted pointer/key action. Programmatic routes stay silent.
+const audioEvents = new AbortController();
+const prepareInteractionAudio = (event: Event) => {
+  if (!event.isTrusted) return;
+  boot.audio.allowInteractions();
+  if (!bootActive && boot.audio.enabled) void boot.audio.activate();
+};
+document.addEventListener("pointerdown", prepareInteractionAudio, {
+  capture: true,
+  signal: audioEvents.signal,
+});
+document.addEventListener("keydown", prepareInteractionAudio, {
+  capture: true,
+  signal: audioEvents.signal,
+});
+window.addEventListener("pagehide", () => boot.audio.stop(), {
+  signal: audioEvents.signal,
+});
+
 document.addEventListener("keydown", (event) => {
   if (document.querySelector("dialog[open]")) return;
   if (bootActive) {
@@ -445,8 +501,10 @@ function resumeScene() {
   sceneFrame = requestAnimationFrame(frame);
 }
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) pauseScene();
-  else resumeScene();
+  if (document.hidden) {
+    boot.audio.stop();
+    pauseScene();
+  } else resumeScene();
 });
 window.addEventListener("resize", () => {
   scene?.resize();
@@ -533,6 +591,7 @@ async function init() {
         hansenProfile: {
           scene,
           bootAudio: boot.audio,
+          audio: boot.audio,
           pause: pauseScene,
           resume: resumeScene,
         },
@@ -589,6 +648,7 @@ void init();
 if (import.meta.hot)
   import.meta.hot.dispose(() => {
     cancelAnimationFrame(sceneFrame);
+    audioEvents.abort();
     boot.dispose();
     scene?.dispose();
   });

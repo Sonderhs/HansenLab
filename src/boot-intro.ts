@@ -144,6 +144,7 @@ export class BlogBoot {
   }
   toggleSoundPreference() {
     this.audio.setEnabled(!this.audio.enabled);
+    if (this.audio.enabled) this.audio.interact("confirm");
     this.updateSoundControl();
   }
   private updateSoundControl() {

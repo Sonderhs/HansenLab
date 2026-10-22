@@ -76,7 +76,9 @@ async (page) => {
   await page.waitForFunction(()=>window.hansenProfile.bootAudio.stats().state==='running');
   await page.getByRole('button',{name:'先浏览文章目录',exact:true}).click();
   await page.getByRole('dialog',{name:/文章目录/}).waitFor();
-  check(!(await stats()).active&&(await stats()).voices===0,'Early directory entry stops opening sound');
+  const directoryKeys=(await stats()).played.key;
+  await page.waitForTimeout(250);
+  check((await stats()).played.key===directoryKeys&&(await stats()).played['page-open']===1,'Directory replaces opening with one interface sound');
   await page.goto('http://127.0.0.1:5175/#post/neko-rag');
   await page.locator('#reader').waitFor({state:'visible'});
   check(await page.evaluate(()=>audioProbe.length===0),'Article deep link creates no audio device');

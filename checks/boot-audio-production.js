@@ -39,7 +39,7 @@ async (page) => {
   await page.waitForFunction(()=>audioProbe[0].context.state==='running');
   await page.getByRole('button',{name:'先浏览文章目录',exact:true}).click();
   await page.getByRole('dialog',{name:/文章目录/}).waitFor();
-  check(await page.evaluate(()=>audioProbe[0].context.state==='suspended'),'Production early reading suspends output');
+  check(await page.evaluate(()=>audioProbe[0].context.state==='running'),'Production early directory enables interface feedback');
   await page.goto('http://127.0.0.1:4185/?audio-pending=1');
   await page.locator('[data-intro-sound]').click();
   await page.getByRole('button',{name:'重试音效并重播',exact:true}).waitFor();

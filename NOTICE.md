@@ -22,4 +22,4 @@ art/rhine-archive.blend 与 art/archive-assembly.blend 对应 public/assets/ 的
 
 ## Hansen Lab 开场音效（2026-10-22）
 
-依据用户要求复用 RhineLabUI 的 Web Audio 合成器、开场提示时刻和逐字节奏；提取前哈希见 docs/SOURCE-MANIFEST.json。打字声复用其三个各 38ms 的参考短音，来自《明日方舟》特别映像 [莱茵生命：访问]，原作者权利保留，不纳入 MIT；精确剪切与处理见 public/audio/typing-source.json。未复制完整音轨。没有引入原项目的背景音乐或全局交互声音。
+依据用户要求复用 RhineLabUI 的 Web Audio 合成器、开场提示时刻和逐字节奏；提取前哈希见 docs/SOURCE-MANIFEST.json。打字声复用其三个各 38ms 的参考短音，来自《明日方舟》特别映像 [莱茵生命：访问]，原作者权利保留，不纳入 MIT；精确剪切与处理见 public/audio/typing-source.json。未复制完整音轨。没有引入原项目的背景音乐。后续按用户要求补齐浏览交互，复用同一合成器的玻璃音和电子提示音，仍遵循上述来源与署名。
