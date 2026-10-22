@@ -10,20 +10,31 @@ import {
 import { ArchiveScene } from "./scene";
 import { qualityPresets } from "./render-quality";
 import { wrap, type ArchiveNavigation } from "./archive-loop";
-import { escapeHtml as esc } from "./html";
-import { archiveColumns, columnFiles, fileLocation, posts } from "./data";
+import {
+  archiveColumns,
+  columnFiles,
+  fileLocation,
+  posts,
+  articles,
+  collections,
+  appearanceFor,
+  categoryLabel,
+} from "./data";
+import { ArticleCatalog, type CatalogPreset } from "./catalog";
+import { readerContent } from "./reader-content";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector)!;
 const mark = `<svg viewBox="0 0 64 64" fill="none" aria-hidden="true"><path d="M16 13v38m32-38v38M16 32h32" stroke="currentColor" stroke-width="5"/><path d="M40 13h8v8" stroke="#b07a38" stroke-width="5"/></svg>`;
 
+const titleMeasure = document.createElement("canvas").getContext("2d")!;
 const motionQuery = matchMedia("(prefers-reduced-motion: reduce)");
 const profileBaseline =
   import.meta.env.DEV &&
   new URLSearchParams(location.search).get("profile") === "baseline";
 let qualityMode: "original" | "performance" = "original";
 let reduced = motionQuery.matches;
-let selected = 16;
+let selected = posts.findIndex((post) => post.collection === "projects");
 let ready = false;
 let bootActive = true;
 let sceneFailed = false;
@@ -35,8 +46,6 @@ let lastFrame = 0;
 let drawerReturn: HTMLElement | null = null;
 let articleReturn: HTMLElement | null = null;
 let readerScroll = 0;
-let indexCategory = "全部档案";
-let searchQuery = "";
 const memory = archiveColumns.map(() => 0);
 let currentRoute = "";
 let readerEntryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -50,10 +59,10 @@ $("#app").innerHTML = `
     <header class="masthead"><a class="wordmark" href="#" aria-label="Hansen Lab 首页"><span class="brand-line">${mark}<span>HANSEN LAB</span><i></i></span><span class="brand-sub">RESEARCH · BUILD · RECORD</span><span class="brand-cn">个人研究与实践档案</span></a>
       <nav aria-label="主导航"><button data-action="index">文章目录 <small>INDEX</small><span class="shortcut">/</span></button><button data-action="projects">项目 <small>PROJECTS</small></button><button data-action="about">关于 <small>ABOUT</small></button></nav>
     </header>
-    <div class="intro"><span class="eyebrow"><i class="signal"></i> AN OPEN-ENDED EXPERIMENT</span><p>保持好奇，持续构建。</p><span>记录技术、构建过程，以及值得留下的想法。</span></div>
-    <section class="selection" aria-label="当前档案"><div class="eyebrow"><span id="post-category"></span><span class="selection-id" id="post-id"></span></div><h1 id="post-title"><span id="post-title-motion"></span><span id="post-title-static"></span></h1><div class="selection-rule"><i></i><span id="post-en"></span></div><p id="post-lead"></p><div class="post-meta"><time id="post-date"></time><span>／</span><span id="post-minutes"></span><span class="sample">示例内容</span></div><a id="read" class="read-link" href="#">打开这份记录 <span>↗</span></a></section>
-    <div class="archive-position"><span class="eyebrow">ARCHIVE / SELECT</span><div><span id="row-number"></span><i>/</i><small>08</small></div></div>
-    <div class="lane-controls"><button data-action="lane-prev" aria-label="上一分类">←</button><div><span class="eyebrow" id="lane-number"></span><strong id="lane-title"></strong></div><button data-action="lane-next" aria-label="下一分类">→</button></div>
+    <div class="intro"><span class="eyebrow"><i class="signal"></i> AN OPEN-ENDED EXPERIMENT</span><p>保持好奇，持续构建。</p><span>技术笔记、项目实践与论文阅读。</span></div>
+    <section class="selection" aria-label="当前档案"><div class="eyebrow"><span id="post-category"></span><span class="selection-id" id="post-id"></span></div><h1 id="post-title"><span id="post-title-motion"></span><span id="post-title-static"></span></h1><div class="selection-rule"><i></i><span id="post-en"></span></div><p id="post-lead"></p><div class="post-meta"><time id="post-date"></time><span>／</span><span id="post-minutes"></span><span class="sample">选读 · 正文节选</span></div><a id="read" class="read-link" href="#">打开这份记录 <span>↗</span></a></section>
+    <div class="archive-position"><span class="eyebrow">精选 / SELECT</span><div><span id="row-number"></span><i>/</i><small id="row-total"></small></div></div>
+    <div class="lane-controls"><button data-action="lane-prev" aria-label="上一分类">←</button><div><span class="eyebrow" id="lane-number"></span><strong id="lane-title"></strong><button class="collection-open" data-action="collection">查看该集合 ↗</button></div><button data-action="lane-next" aria-label="下一分类">→</button></div>
     <div class="row-controls"><button data-action="row-prev" aria-label="上一篇">↑</button><div id="ticks"></div><button data-action="row-next" aria-label="下一篇">↓</button></div>
     <div class="browse-hint">拖动探索 <span>／</span> 滚轮切换 <span>／</span> <kbd>↵</kbd> 打开记录</div>
     <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
@@ -61,9 +70,11 @@ $("#app").innerHTML = `
     <div id="loading" role="status" hidden><span>${mark}</span><b>HANSEN LAB</b><p>正在连接三维档案库…</p><i></i><button data-action="index">先浏览文章目录 →</button></div>
   </div>
   <section id="reader" aria-label="文章阅读" hidden><header class="reader-header"><a href="#" class="reader-brand">${mark} HANSEN LAB</a><span>RESEARCH · BUILD · RECORD</span><a href="#" class="return-home">← 返回三维档案</a></header><div class="reader-layout"><aside id="toc" aria-label="文章目录"></aside><article id="article" tabindex="-1"></article></div><div class="reading-track"><i id="progress"></i></div></section>
-  <dialog id="index-dialog" aria-labelledby="index-heading"><header class="dialog-header"><div><span class="eyebrow">HANSEN LAB / ARCHIVE INDEX</span><h2 id="index-heading">文章目录<span>40</span></h2></div><button data-action="close" aria-label="关闭目录">✕</button></header><label class="search-field"><span>⌕</span><input id="search" type="search" placeholder="搜索标题、标签、关键词…" autocomplete="off" aria-label="搜索文章"><kbd>ESC</kbd></label><div id="filters" class="filters"></div><div class="index-info"><span id="result-count" role="status"></span><span>全部为演示内容</span></div><div id="results"></div></dialog>
-  <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-heading"><button class="about-close" data-action="close" aria-label="关闭关于">✕</button><span class="eyebrow">THE PERSON BEHIND THE LAB</span><h2 id="about-heading">你好，这里是<br>Hansen Lab<span>↗</span></h2><p>一间用于研究、构建与记录的个人实验室。</p><p>这里以技术与项目实践为主，也存放生活里的观察与尚未成形的想法。希望每一件作品都能留下过程，每一次尝试都有迹可循。</p><div class="about-foot"><span>RESEARCH · BUILD · RECORD</span><span>概念演示 / 个人介绍待补充</span></div></dialog>
+  <dialog id="index-dialog" aria-labelledby="index-heading"></dialog>
+  <dialog id="about-dialog" class="about-dialog" aria-labelledby="about-heading"><button class="about-close" data-action="close" aria-label="关闭关于">✕</button><span class="eyebrow">THE PERSON BEHIND THE LAB</span><h2 id="about-heading">你好，这里是<br>Hansen Lab<span>↗</span></h2><p>一间用于研究、构建与记录的个人实验室。</p><p>这里以技术与项目实践为主，也存放生活里的观察与尚未成形的想法。希望每一件作品都能留下过程，每一次尝试都有迹可循。</p><div class="about-foot"><span>RESEARCH · BUILD · RECORD</span><span>内容组织试用 / 18 篇正文节选</span></div></dialog>
 `;
+
+const catalog = new ArticleCatalog($<HTMLDialogElement>("#index-dialog"));
 
 const rollingTitle = createRollingText($("#post-title-motion"), {
   text: posts[selected].title,
@@ -80,31 +91,49 @@ const rollingRow = createRollingNumber($("#row-number"), {
   duration: 460,
   animated: !reduced,
 });
-$("#ticks").innerHTML = Array.from(
-  { length: 8 },
-  (_, row) =>
-    `<button data-row="${row}" aria-label="选择第 ${row + 1} 篇"><i></i></button>`,
-).join("");
 
+function fitTitle() {
+  const title = $("#post-title");
+  title.dataset.long = "false";
+  const style = getComputedStyle(title);
+  titleMeasure.font =
+    style.fontWeight + " " + style.fontSize + " " + style.fontFamily;
+  title.dataset.long = String(
+    titleMeasure.measureText(posts[selected].title).width >
+      title.clientWidth - 8,
+  );
+}
 function syncSelection() {
   const post = posts[selected];
   const { lane } = fileLocation(selected);
   const row = columnFiles(lane).indexOf(selected);
   memory[lane] = row;
-  $("#post-category").textContent = post.category;
+  $("#post-category").textContent = categoryLabel(post.category);
   $("#post-id").textContent = post.id;
   rollingTitle.update({ text: post.title, animated: !reduced });
   $("#post-title-static").textContent = post.title;
+  fitTitle();
   rollingRow.update({ value: row + 1, animated: !reduced });
   $("#post-en").textContent = post.en;
   $("#post-lead").textContent = post.lead;
   $("#post-date").textContent = post.date.replaceAll("-", ".");
   $("#post-date").setAttribute("datetime", post.date);
-  $("#post-minutes").textContent = `${post.minutes} MIN READ`;
+  $("#post-minutes").textContent = `${post.minutes} MIN · EXCERPT`;
   $("#read").setAttribute("href", `#post/${post.slug}`);
   $("#lane-number").textContent =
     `COLLECTION ${String(lane + 1).padStart(2, "0")} / 05`;
-  $("#lane-title").textContent = post.category;
+  $("#lane-title").textContent = collections[lane].name;
+  $(".collection-open").textContent =
+    `查看该集合 · ${collections[lane].articleSlugs.length} 篇 ↗`;
+  $("#home").dataset.collection = collections[lane].id;
+  const count = columnFiles(lane).length;
+  $("#row-total").textContent = String(count).padStart(2, "0");
+  if ($("#ticks").childElementCount !== count)
+    $("#ticks").innerHTML = Array.from(
+      { length: count },
+      (_, row) =>
+        `<button data-row="${row}" aria-label="选择第 ${row + 1} 篇"><i></i></button>`,
+    ).join("");
   document
     .querySelectorAll<HTMLButtonElement>("[data-row]")
     .forEach((button) => {
@@ -133,32 +162,6 @@ function navigate(axis: "lane" | "row", direction: number) {
   }
 }
 
-function updateResults() {
-  const query = searchQuery.trim().toLocaleLowerCase();
-  const results = posts.filter(
-    (post) =>
-      (indexCategory === "全部档案" || post.category === indexCategory) &&
-      `${post.title} ${post.category} ${post.tags.join(" ")} ${post.lead}`
-        .toLocaleLowerCase()
-        .includes(query),
-  );
-  $("#filters").innerHTML = ["全部档案", ...archiveColumns]
-    .map(
-      (category) =>
-        `<button data-filter="${esc(category)}" aria-pressed="${category === indexCategory}">${esc(category)}</button>`,
-    )
-    .join("");
-  $("#result-count").textContent =
-    `${String(results.length).padStart(2, "0")} 份记录`;
-  $("#results").innerHTML = results.length
-    ? results
-        .map(
-          (post) =>
-            `<a class="result" href="#post/${post.slug}"><span class="result-code">${post.id}</span><div><span class="result-category">${post.category} <i>／</i> ${post.minutes} MIN</span><h3>${esc(post.title)}</h3><p>${post.tags.map(esc).join(" · ")}</p></div><span class="result-arrow">↗</span></a>`,
-        )
-        .join("")
-    : `<div class="no-results"><span>∅</span><p>没有找到对应记录</p><small>试试其他关键词，或切换到全部档案。</small><button data-action="reset-search">清除搜索与筛选 →</button></div>`;
-}
 function closeDialogs() {
   document
     .querySelectorAll<HTMLDialogElement>("dialog[open]")
@@ -173,13 +176,11 @@ function openDialog(id: string) {
   if (!profileBaseline) pauseScene();
   if (id === "#index-dialog") $("#search").focus();
 }
-function showIndex(category = "全部档案") {
-  indexCategory = category;
-  searchQuery = "";
-  $<HTMLInputElement>("#search").value = "";
-  updateResults();
+function showIndex(preset: CatalogPreset = {}) {
+  catalog.reset(preset);
   openDialog("#index-dialog");
 }
+
 document.querySelectorAll<HTMLDialogElement>("dialog").forEach((dialog) => {
   dialog.addEventListener("keydown", (event) => {
     if (event.key !== "Escape") return;
@@ -206,17 +207,13 @@ document.querySelectorAll<HTMLDialogElement>("dialog").forEach((dialog) => {
     }
   });
 });
-$("#search").addEventListener("input", (event) => {
-  searchQuery = (event.target as HTMLInputElement).value;
-  updateResults();
-});
 
 function applyRoute() {
   const slug = location.hash.startsWith("#post/") ? location.hash.slice(6) : "";
   if (slug === currentRoute) return;
   clearTimeout(readerEntryTimer);
   currentRoute = slug;
-  const index = posts.findIndex((post) => post.slug === slug);
+  const index = articles.findIndex((post) => post.slug === slug);
   if (index < 0) {
     if (!reading) return;
     reading = false;
@@ -238,16 +235,15 @@ function applyRoute() {
   $("#reader").inert = false;
   $("#home").inert = true;
   $("#home").classList.add("reading");
-  select(index);
+  const post = articles[index];
+  const appearance = appearanceFor(post.slug, fileLocation(selected).lane);
+  if (appearance >= 0) select(appearance);
   scene?.setMode("detail");
   readerScroll = 0;
-  const post = posts[index];
   document.title = `${post.title} · Hansen Lab`;
-  $("#toc").innerHTML =
-    `<span class="eyebrow">ON THIS PAGE</span>${post.sections.map((section, n) => `<a href="#section-${n}" data-section="${n}"><span>0${n + 1}</span>${esc(section.heading)}</a>`).join("")}<div class="toc-note">${post.id}<br>概念演示 · 示例文章</div>`;
-  const related = posts[(index + 1) % posts.length];
-  $("#article").innerHTML =
-    `<div class="article-kicker"><span>${post.category}</span><span>${post.id} / 示例内容</span></div><h1>${esc(post.title)}</h1><p class="article-lead">${esc(post.lead)}</p><div class="article-meta"><span>Hansen</span><time datetime="${post.date}">${post.date.replaceAll("-", ".")}</time><span>${post.minutes} 分钟阅读</span></div><div class="article-tags">${post.tags.map((tag) => `<span>${esc(tag)}</span>`).join("")}</div><div class="article-body">${post.sections.map((section, n) => `<section id="section-${n}"><h2><span>0${n + 1}</span>${esc(section.heading)}</h2>${section.paragraphs.map((paragraph) => `<p>${esc(paragraph)}</p>`).join("")}${section.code ? `<div class="code-heading"><span>TYPESCRIPT</span><button data-action="copy">复制代码</button></div><pre><code>${esc(section.code)}</code></pre>` : ""}</section>`).join("")}<blockquote>让每一件作品留下过程，让每一次尝试都有迹可循。</blockquote></div><div class="article-end"><span>END OF RECORD <i>■</i></span><a href="#">返回三维档案 ↗</a></div><a class="next-post" href="#post/${related.slug}"><span class="eyebrow">NEXT RECORD / 下一份记录</span><strong>${esc(related.title)} <span>→</span></strong></a><footer class="article-footer">HANSEN LAB <span>RESEARCH · BUILD · RECORD</span></footer>`;
+  const content = readerContent(post);
+  $("#toc").innerHTML = content.toc;
+  $("#article").innerHTML = content.body;
   $("#reader").scrollTop = 0;
   $("#progress").style.width = "0%";
   readerEntryTimer = setTimeout(() => {
@@ -282,7 +278,10 @@ document.addEventListener("click", async (event) => {
     boot.replay();
   }
   if (action === "index") showIndex();
-  if (action === "projects") showIndex("项目实践");
+  if (action === "projects")
+    showIndex({ collection: "projects", view: "series" });
+  if (action === "collection")
+    showIndex({ collection: collections[fileLocation(selected).lane].id });
   if (action === "about") openDialog("#about-dialog");
   if (action === "close") closeDialogs();
   if (action === "retry") location.reload();
@@ -300,13 +299,6 @@ document.addEventListener("click", async (event) => {
     $("#quality").textContent =
       `画质 ${qualityMode === "original" ? "原始" : "流畅"}`;
   }
-  if (action === "reset-search") {
-    searchQuery = "";
-    indexCategory = "全部档案";
-    $<HTMLInputElement>("#search").value = "";
-    updateResults();
-    $("#search").focus();
-  }
   if (action === "copy") {
     const text =
       actionElement!.closest(".code-heading")?.nextElementSibling
@@ -318,14 +310,14 @@ document.addEventListener("click", async (event) => {
       actionElement!.textContent = "请选中下方代码复制";
     }
   }
-  const filter = target.closest<HTMLElement>("[data-filter]");
-  if (filter) {
-    indexCategory = filter.dataset.filter!;
-    updateResults();
-    document
-      .querySelector<HTMLButtonElement>(`[data-filter="${indexCategory}"]`)
-      ?.focus();
-  }
+  const tag = target.closest<HTMLElement>("[data-read-tag]")?.dataset.readTag;
+  if (tag) showIndex({ tag });
+  const category = target.closest<HTMLElement>("[data-read-category]")?.dataset
+    .readCategory;
+  if (category) showIndex({ category });
+  const series =
+    target.closest<HTMLElement>("[data-read-series]")?.dataset.readSeries;
+  if (series) showIndex({ series });
   const row = target.closest<HTMLElement>("[data-row]");
   if (row)
     select(columnFiles(fileLocation(selected).lane)[Number(row.dataset.row)]);
@@ -455,7 +447,11 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden) pauseScene();
   else resumeScene();
 });
-window.addEventListener("resize", () => scene?.resize());
+window.addEventListener("resize", () => {
+  scene?.resize();
+  fitTitle();
+});
+document.fonts.addEventListener("loadingdone", fitTitle);
 
 function handleSceneFailure(error: unknown) {
   console.error("Hansen Lab 3D load failed", error);

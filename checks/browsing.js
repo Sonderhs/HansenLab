@@ -25,7 +25,7 @@ async (page) => {
   await page.locator("#reader").waitFor({ state: "visible" })
   check((await page.title()).includes("Hansen Lab"), "Article title updated")
   check(
-    (await page.locator("#article pre").count()) === 1,
+    (await page.locator("#article pre").count()) >= 1,
     "Code block present",
   )
   await page.locator(".return-home").click()
@@ -45,12 +45,12 @@ async (page) => {
   )
   await page.getByRole("button", { name: "清除搜索与筛选" }).click()
   check(
-    (await page.locator(".result").count()) === 40,
+    (await page.locator(".result").count()) === 18,
     "Clear search restores all sample posts",
   )
-  await page.getByRole("button", { name: "生活随笔", exact: true }).click()
-  check((await page.locator(".result").count()) === 8, "Category filtering")
-  await page.getByRole("searchbox", { name: "搜索文章" }).fill("空白")
+  await page.getByRole("combobox", { name: "按原分类筛选" }).selectOption("Go")
+  check((await page.locator(".result").count()) === 2, "Category filtering")
+  await page.getByRole("searchbox", { name: "搜索文章" }).fill("Context")
   check(
     (await page.locator(".result").count()) === 1,
     "Search plus category filtering",
@@ -62,13 +62,13 @@ async (page) => {
     "Directory closes on article navigation",
   )
   check(
-    (await page.locator("#article h1").textContent()).includes("空白"),
+    (await page.locator("#article h1").textContent()).includes("Context"),
     "Search result opens corresponding article",
   )
   await page.reload()
   await page.locator("#reader").waitFor({ state: "visible" })
   check(
-    (await page.locator("#article h1").textContent()).includes("空白"),
+    (await page.locator("#article h1").textContent()).includes("Context"),
     "Direct article URL survives reload",
   )
   await page.keyboard.press("Escape")

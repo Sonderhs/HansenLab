@@ -24,16 +24,22 @@ npm run build
 npm run preview
 ```
 
-静态产物位于 `dist/`。默认部署在站点根路径；子路径部署可在构建时设置 `HANSEN_BASE=/HansenLab/`。文章采用 `#post/lab-017` 形式的链接，无需服务端路由回退。
+静态产物位于 `dist/`。默认部署在站点根路径；子路径部署可在构建时设置 `HANSEN_BASE=/HansenLab/`。文章采用 `#post/neko-rag` 形式的链接，无需服务端路由回退。
 
 ## 使用与内容
 
 - 首页拖动、滚轮、方向键切换；Enter 打开文章；`/` 搜索，Esc 返回。
-- `src/data.ts` 保存全部示例文章、分类和三维位置映射。
+- `content/selection.json` 保存 18 篇原博客正文节选；来源与哈希见 `content/SOURCE.json`。
+- `src/data.ts` 分别配置唯一文章、展示集合、系列、标签别名与三维精选位置。
+- `src/catalog.ts` 管理目录筛选，`src/reader-content.ts` 管理节选阅读与系列导航。
 - `src/main.ts` 管理页面交互，`src/style.css` 管理博客布局，`src/scene.ts` 管理三维场景。
 - `public/assets/` 为模型，`art/` 为对应 Blender 源文件与脚本。
 
-当前 40 篇文章的标题、日期、阅读时长和正文均为演示内容，页面已标明。五类 × 八篇是现阶段的阵列适配；任意数量文章、Markdown 内容流程、个人介绍与正式部署仍待后续完善。
+当前为内容组织试用版：从原博客 390 篇文章中只选入 18 篇正文节选，保留原标题、日期、分类、标签及原文入口。提供五个展示集合、七个原分类、24 个展示标签和六个系列／专题。标签别名只合并显示，原标签保留；系列标明实际选入数量。阅读时长按节选长度估算。
+
+首页展示集合与文章分类分开，同一篇 Neko 可同时出现在 AI 与项目中，目录中仍只有一条文章记录。各列精选篇数分别为 6 / 4 / 3 / 2 / 5，不再强制每列八篇；打开集合可查看本次选入的全部相关文章。目录支持集合、分类、多标签交集、关键词及发布时间排序；正文可点击标签、分类和专题继续浏览。
+
+本轮未进行全量迁移，未复制旧站图片、PDF、草稿或服务端配置。完整 Markdown、公式／图片渲染、旧链接迁移和长期写作流程仍待后续讨论。维护说明见 [content/README.md](content/README.md)，验收见 [verification/CONTENT-CATALOG.md](verification/CONTENT-CATALOG.md)。
 
 ## 开场与加载
 

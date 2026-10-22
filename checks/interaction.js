@@ -14,7 +14,7 @@ async (page) => {
   const directoryStart = await count()
   await page.waitForTimeout(800)
   check((await count()) === directoryStart, "No 3D draws behind directory")
-  await page.getByRole("searchbox", { name: "搜索文章" }).fill("玻璃")
+  await page.getByRole("searchbox", { name: "搜索文章" }).fill("Neko")
   check(
     (await page.locator(".result").count()) === 1,
     "Search responds with background paused",

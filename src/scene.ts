@@ -20,7 +20,7 @@ import { applyTextureQuality, resizeQuality } from "./quality-renderer";
 import { CardAppearance } from "./appearance";
 import { configureInternalOptics } from "./internal-optics";
 import { DecryptionController } from "./decryption";
-import { fileAtSlot, fileLocation } from "./data";
+import { fileAtSlot, fileLocation, archiveRowPeriod } from "./data";
 import {
   cellKey,
   sameCell,
@@ -700,7 +700,7 @@ export class ArchiveScene {
           : 0,
       row:
         Math.abs(this.selectedCell.row) > 2048
-          ? Math.floor((this.selectedCell.row - 12) / 8) * 8
+          ? Math.floor((this.selectedCell.row - 12) / archiveRowPeriod) * archiveRowPeriod
           : 0,
     };
     if (!shift.lane && !shift.row) return;

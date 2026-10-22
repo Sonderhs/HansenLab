@@ -1,0 +1,797 @@
+[
+  {
+    "id": "H-001",
+    "slug": "clickhouse-01",
+    "title": "ClickHouse学习笔记（一）：从订单报表理解列式存储与OLAP",
+    "category": "Java",
+    "date": "2026-10-10",
+    "minutes": 2,
+    "tags": [
+      "ClickHouse",
+      "OLAP",
+      "数据库"
+    ],
+    "lead": "从订单分析场景出发，理解 ClickHouse 的 OLAP 定位、列式存储、压缩与向量化执行，区分业务数据库和分析数据库，建立学习 MergeTree、物化视图与查询优化的整体框架。",
+    "sections": [
+      {
+        "heading": "内容选读",
+        "paragraphs": [
+          "订单系统刚上线时，运营只想知道今天卖了多少钱。一条 SUM 查询就能解决。",
+          "后来，报表要按城市、渠道、小时拆分，还要统计支付人数、客单价和最近一年的趋势。订单越积越多，每次打开报表都要扫描大量记录，业务数据库的压力也越来越大。",
+          "这时需要先想清楚：创建一笔订单和分析一亿笔订单，对数据库的要求有什么不同？"
+        ]
+      },
+      {
+        "heading": "一、ClickHouse 是什么？",
+        "paragraphs": [
+          "ClickHouse 是面向分析查询的列式数据库，擅长对大量记录进行筛选、分组和聚合。",
+          "“分析查询”可以是每天的订单金额，也可以是接口延迟分位数、用户行为趋势、日志中的错误比例。它的典型输入是不断产生的明细数据，输出是经过统计的结果。官方介绍将它定位为列式 OLAP 数据库。",
+          "这里要关注的是工作负载，而不是“哪一种数据库更高级”。"
+        ],
+        "code": "用户提交订单\n     ↓\n业务服务 → MySQL：保存业务状态、完成事务\n              ↓\n       CDC / 事件管道 / 批量导入\n              ↓\n        ClickHouse：分析明细\n              ↓\n        报表、监控、统计接口",
+        "language": "text"
+      },
+      {
+        "heading": "二、列式存储：为什么只查几列会有优势？",
+        "paragraphs": [
+          "查询主要需要 city 和 amount，地址、备注等字段不参与计算。",
+          "列式组织让引擎可以主要读取需要的列。当表很宽、查询只涉及少量列时，能减少无关数据的读取和解码。官方列式存储说明解释了这种设计对分析负载的意义。",
+          "这张图只是逻辑示意。ClickHouse 的实际文件组织还与数据 part 的格式有关，不能简单背成“每一列永远对应一个文件”。"
+        ],
+        "code": "order_id | user_id | city | channel | amount | paid_at | address | remark",
+        "language": "text"
+      }
+    ],
+    "source": {
+      "path": "Java/ClickHouse/ClickHouse学习笔记（一）：从订单报表理解列式存储与OLAP.md",
+      "url": "https://hansen.dpdns.org/2026/10/10/Java/ClickHouse/ClickHouse%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%B8%80%EF%BC%89%EF%BC%9A%E4%BB%8E%E8%AE%A2%E5%8D%95%E6%8A%A5%E8%A1%A8%E7%90%86%E8%A7%A3%E5%88%97%E5%BC%8F%E5%AD%98%E5%82%A8%E4%B8%8EOLAP/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-002",
+    "slug": "clickhouse-02",
+    "title": "ClickHouse学习笔记（二）：Docker部署与SQL入门实战",
+    "category": "Java",
+    "date": "2026-10-10",
+    "minutes": 2,
+    "tags": [
+      "ClickHouse",
+      "Docker",
+      "SQL"
+    ],
+    "lead": "使用官方 Docker 镜像搭建 ClickHouse 单节点学习环境，通过八条支付记录练习 MergeTree 建表、批量插入、分组聚合、条件聚合与窗口函数，明确 Decimal、时区和重复写入的注意事项。",
+    "sections": [
+      {
+        "heading": "内容选读",
+        "paragraphs": [
+          "上一篇把 ClickHouse 理解成了“负责分析大量明细数据的数据库”。这一篇直接动手：启动服务，建一张支付事实表，再回答城市销售额、支付人数和累计金额几个问题。",
+          "这次实验的目标是：每条 SQL 都知道自己在统计什么，并且能用原始记录核对结果。"
+        ]
+      },
+      {
+        "heading": "一、环境准备与启动",
+        "paragraphs": [
+          "Docker 命令使用单行形式，在 PowerShell 和 Bash 中都不需要续行符。",
+          "需要看到 Server 信息。如果提示无法连接 Docker daemon，先启动 Docker Desktop 并确认使用 Linux 容器。",
+          "端口映射到本机的 127.0.0.1。"
+        ],
+        "code": "docker version",
+        "language": "bash"
+      },
+      {
+        "heading": "二、建表：先明确字段和统计口径",
+        "paragraphs": [
+          "本文的数据是支付成功事实：一个订单只写一条成功支付记录，不包含退款。",
+          "这里故意不用 IF NOT EXISTS：如果同名实验表已经存在，先查看 SHOW CREATE TABLE 和数据，避免以为自己创建了新表，却继续向旧表重复插入。",
+          "Decimal(12, 2) 中 12 是总位数，2 是小数位数。金额也可以按“分”保存为整数；Float64 的二进制浮点表示不适合随意承担需要精确到分的核算。Decimal 文档介绍了精度与运算规则。"
+        ],
+        "code": "CREATE TABLE clickhouse_learning.order_payments\n(\n    order_id UInt64,\n    user_id UInt64,\n    city LowCardinality(String),\n    channel LowCardinality(String),\n    amount Decimal(12, 2),\n    paid_at DateTime('Asia/Shanghai')\n)\nENGINE = MergeTree\nPARTITION BY toYYYYMM(paid_at)\nORDER BY (city, paid_at, order_id);",
+        "language": "sql"
+      }
+    ],
+    "source": {
+      "path": "Java/ClickHouse/ClickHouse学习笔记（二）：Docker部署与SQL入门实战.md",
+      "url": "https://hansen.dpdns.org/2026/10/10/Java/ClickHouse/ClickHouse%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%BA%8C%EF%BC%89%EF%BC%9ADocker%E9%83%A8%E7%BD%B2%E4%B8%8ESQL%E5%85%A5%E9%97%A8%E5%AE%9E%E6%88%98/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-003",
+    "slug": "clickhouse-03",
+    "title": "ClickHouse学习笔记（三）：MergeTree分区排序与稀疏索引",
+    "category": "Java",
+    "date": "2026-10-10",
+    "minutes": 2,
+    "tags": [
+      "ClickHouse",
+      "MergeTree",
+      "索引"
+    ],
+    "lead": "从一批支付记录的写入和读取过程理解 MergeTree，区分 part、partition、排序键和主键，解释 granule 与稀疏索引，并通过 ReplacingMergeTree 示例理解后台去重与 FINAL 的边界。",
+    "sections": [
+      {
+        "heading": "内容选读",
+        "paragraphs": [
+          "第二篇的建表语句里有三行特别重要：",
+          "刚开始很容易把它们都理解成“建索引”。但它们分别决定表引擎、数据分区和排序方式，解决的问题并不相同。",
+          "这一篇沿着写入一批数据，再读取其中一部分的过程，理解 MergeTree 为什么这样设计。"
+        ],
+        "code": "ENGINE = MergeTree\nPARTITION BY toYYYYMM(paid_at)\nORDER BY (city, paid_at, order_id)",
+        "language": "sql"
+      },
+      {
+        "heading": "一、Part：每批写入之后发生了什么？",
+        "paragraphs": [
+          "可以先用下面的图理解 MergeTree 的普通写入流程：",
+          "Part 是表中的数据片段，Partition 是逻辑上的数据分区。 一个分区可以包含多个 part，一次写入也可能涉及多个分区。官方存储说明介绍了 part 的排序和合并方式。",
+          "假设一批记录跨越 9 月和 10 月，而分区键是 toYYYYMM(paidat)："
+        ],
+        "code": "一批输入记录\n      ↓\n按分区键拆分\n      ↓\n各部分按排序键排序\n      ↓\n形成新的数据 part\n      ↓\n后台选择同一分区中的 part 进行合并",
+        "language": "text"
+      },
+      {
+        "heading": "二、Partition：主要用于组织和管理数据",
+        "paragraphs": [
+          "2026 年 10 月的支付属于 202610，11 月属于 202611。",
+          "在查询条件允许时排除不相关的分区。",
+          "按分区进行历史数据管理、迁移或清理。"
+        ],
+        "code": "PARTITION BY toYYYYMM(paid_at)",
+        "language": "sql"
+      }
+    ],
+    "source": {
+      "path": "Java/ClickHouse/ClickHouse学习笔记（三）：MergeTree分区排序与稀疏索引.md",
+      "url": "https://hansen.dpdns.org/2026/10/10/Java/ClickHouse/ClickHouse%E5%AD%A6%E4%B9%A0%E7%AC%94%E8%AE%B0%EF%BC%88%E4%B8%89%EF%BC%89%EF%BC%9AMergeTree%E5%88%86%E5%8C%BA%E6%8E%92%E5%BA%8F%E4%B8%8E%E7%A8%80%E7%96%8F%E7%B4%A2%E5%BC%95/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-004",
+    "slug": "go-concurrency",
+    "title": "Go 并发编程：从 Goroutine 到并发模式，你该知道的一切",
+    "category": "Go",
+    "date": "2026-05-04",
+    "minutes": 2,
+    "tags": [
+      "Go",
+      "go-basics"
+    ],
+    "lead": "深入掌握 Go 语言并发编程核心——Goroutine 调度模型、Channel 通信、WaitGroup/Mutex/RWMutex 同步原语，以及实战中的并发模式与避坑指南。",
+    "sections": [
+      {
+        "heading": "内容选读",
+        "paragraphs": [
+          "你写了一个简单的 Go 程序，加了个 go 关键字，以为它在并发运行——但 go run -race 报出了 12 条 WARNING。你盯着满屏的竞态检测输出，不知道问题出在哪里。",
+          "这就是 Go 并发的真实写照：用起来简单，用对需要理解。Go 的并发原语数量不多——一双手指就能数完——但它们组合出来的威力极强。这篇文章会带你从底层模型到实战模式，把 Go 并发真正吃透。"
+        ]
+      },
+      {
+        "heading": "一、Goroutine：一个 go 关键字背后是什么",
+        "paragraphs": [
+          "Goroutine 是 Go 运行时管理的轻量级执行单元。与操作系统线程（OS 线程）相比，它占用的资源非常少，一个程序可以轻松创建数以万计的 goroutine。",
+          "当你写下 go doSomething()，Go 运行时做了什么？它在用户态创建了一个 goroutine，而不是在操作系统层面创建线程。",
+          "Go 使用的是 M:N 调度模型（G-P-M 模型）："
+        ],
+        "code": "创建 10,000 个并发单元：\n           Goroutine      OS 线程\n初始栈      ~2KB           ~1MB\n创建时间    ~2-3μs         ~1ms\n切换代价    ~200ns         ~1-2μs\n内存占用    ~20MB          ~10GB",
+        "language": "text"
+      },
+      {
+        "heading": "二、Channel：用通信来共享内存",
+        "paragraphs": [
+          "不要通过共享内存来通信，而要通过通信来共享内存。",
+          "Channel 就是这条哲学的核心实现。它同时做两件事：传递数据 + 同步 goroutine。",
+          "无缓冲 channel 的本质是同步点：发送方必须等接收方准备好，接收方必须等发送方有数据。这其实是 Go 中最强的同步保证。"
+        ],
+        "code": "ch := make(chan int)      // 无缓冲：发送和接收必须同时就绪\nch := make(chan int, 10)  // 有缓冲：缓冲区未满时发送不阻塞",
+        "language": "go"
+      }
+    ],
+    "source": {
+      "path": "Go/Go基础学习/Go并发编程.md",
+      "url": "https://hansen.dpdns.org/2026/05/04/Go/Go%E5%9F%BA%E7%A1%80%E5%AD%A6%E4%B9%A0/Go%E5%B9%B6%E5%8F%91%E7%BC%96%E7%A8%8B/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-005",
+    "slug": "go-context",
+    "title": "Context 面试题",
+    "category": "Go",
+    "date": "2026-05-17",
+    "minutes": 2,
+    "tags": [
+      "Go八股",
+      "go-interview"
+    ],
+    "lead": "本文总结了 Go 语言 Context 相关的面试题，涵盖了 Context 的定义、作用、Value 查找过程以及取消机制等核心概念，帮助你系统复习 Go Context 知识，为面试做好准备。",
+    "sections": [
+      {
+        "heading": "1. Go 语言里的 Context 是什么？",
+        "paragraphs": [
+          "在 Go 中，Context 是一个用于在 协程之间传递上下文信息 的接口，定义在 context 官方文档 中。",
+          "控制 goroutine 生命周期",
+          "Context 本质上是一种协程间的“信号传递 + 范围控制”的工具，它的核心作用是在一个请求处理链路中优雅地传递取消信号、超时和截止日期，并能携带一些范围内的键值对数据"
+        ],
+        "code": "type Context interface {\n    Deadline() (deadline time.Time, ok bool)  // 返回一个时间点，告知任务何时该被取消\n    Done() <-chan struct{}  // 返回一个只读 channel，当 Context 被取消时会关闭这个 channel\n    Err() error  // 在 Done 的 channel 关闭后，返回取消的原因\n    Value(key any) any  // 返回指定 key 对应的 value，这是 context 携带的值\n}",
+        "language": "go"
+      },
+      {
+        "heading": "2. Go 语言的 Context 有什么作用？",
+        "paragraphs": [
+          "主要用于超时控制、协程取消、链路级联取消以及请求级数据传递，广泛应用于 HTTP、RPC、数据库等场景。"
+        ]
+      },
+      {
+        "heading": "3. Context.Value 的查找过程是怎样的？",
+        "paragraphs": [
+          "Context.Value 的查找过程是一个链式递归查找的过程，从当前 Context 开始，沿着父 Context 链一直向上查找直到找到对应的 key 或者到达根 Context。",
+          "具体流程是：当调用 ctx.Value(key) 时，首先检查当前 Context 是否包含这个 key，如果当前层没有，就会调用 parent.Value(key) 继续向上查找。这个过程会一直递归下去，直到找到匹配的 key 返回对应的 value，或者查找到根 Context 返回 nil。"
+        ]
+      }
+    ],
+    "source": {
+      "path": "Go/Go八股/Context面试题.md",
+      "url": "https://hansen.dpdns.org/2026/05/17/Go/Go%E5%85%AB%E8%82%A1/Context%E9%9D%A2%E8%AF%95%E9%A2%98/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-006",
+    "slug": "neko-rag",
+    "title": "Neko 博客助手设计：从关键词匹配到可追问的 RAG",
+    "category": "Agent",
+    "date": "2026-09-14",
+    "minutes": 3,
+    "tags": [
+      "Agent",
+      "RAG",
+      "Cloudflare",
+      "大语言模型"
+    ],
+    "lead": "从关键词误匹配、文章追问失焦等实际问题出发，介绍 Neko 博客助手的意图分流、混合检索、推荐筛选、短期上下文与向量索引更新设计。",
+    "sections": [
+      {
+        "heading": "内容选读",
+        "paragraphs": [
+          "给个人博客接入 AI，最直接的方式是检索几段文章，再交给大模型回答。但真正使用后，会发现“能够回答”和“回答得可靠”之间还有不少距离。",
+          "例如，问“最新的一篇文章是什么”，不应该收到十篇文章的分页目录；问“有哪些 Kafka 相关文章”，不应该看到一堆只是偶然提到 Kafka 的文章；接着问“讲一下这篇文章”，助手也不应该突然忘记刚刚推荐了什么。",
+          "Neko 是我博客里的 AI 助手。本文基于 2026 年 9 月的代码实现，介绍它如何把问题理解、资料查询、回答生成和文章上下文拆开处理。它是受控的问答流程，而不是能够自主修改或发布博客的通用 Agent。"
+        ]
+      },
+      {
+        "heading": "一、先理解问题，再决定怎么查",
+        "paragraphs": [
+          "早期遇到的问题，并不全是模型能力不足。有些错误来自程序把不同任务塞进了同一条检索链路。",
+          "“最新的一篇文章是什么”需要排序；“Kafka 为什么快”需要解释；“有哪些 Kafka 相关文章”需要推荐。这三件事不应该用同一种方式完成。",
+          "当前链路先让模型输出结构化查询计划，由程序校验并执行，而不是直接让模型自由回答。"
+        ],
+        "code": "用户问题 + 最近历史 + 当前页面 + 上轮文章关联\n                         ↓\n            请求校验、人机验证与额度检查\n                         ↓\n              读取线上公开索引，核对文章关联\n                         ↓\n                 模型理解意图，程序校验\n                         ↓\n       ┌─────────────────┼─────────────────┐\n       ↓                 ↓                 ↓\n  目录与统计          推荐相关文章        内容问答\n  程序精确查询        检索后再筛选        取资料后生成\n       └─────────────────┼─────────────────┘\n                         ↓\n              返回答案、引用与文章关联",
+        "language": "text"
+      },
+      {
+        "heading": "二、检索只是找候选，不是最终推荐",
+        "paragraphs": [
+          "普通问答和相关文章推荐使用关键词与向量混合检索。",
+          "关键词检索适合精确术语，比如 Kafka、KRaft；向量检索适合表达不同但含义接近的问题，比如“消息积压怎么办”和“消费者处理能力不足”。两者互补，而不是简单地用向量取代关键词。",
+          "当前实现使用 bge-m3 生成 1024 维向量，语义检索最多取 20 条匹配。两路结果通过 RRF 融合，最终保留最多 6 个片段，每篇文章最多占 2 个。"
+        ],
+        "code": "经过上下文改写的独立问题\n            ↓\n      关键词召回候选\n            +\n      bge-m3 生成查询向量\n            ↓\n      Vectorize 返回语义候选\n            ↓\n      与当前公开索引重新核对\n            ↓\n      RRF 融合排名并限制单篇占比\n            ↓\n      交给后续推荐筛选或回答生成",
+        "language": "text"
+      }
+    ],
+    "source": {
+      "path": "Agent/Neko博客助手设计：从关键词匹配到可追问的RAG.md",
+      "url": "https://hansen.dpdns.org/2026/09/14/Agent/Neko%E5%8D%9A%E5%AE%A2%E5%8A%A9%E6%89%8B%E8%AE%BE%E8%AE%A1%EF%BC%9A%E4%BB%8E%E5%85%B3%E9%94%AE%E8%AF%8D%E5%8C%B9%E9%85%8D%E5%88%B0%E5%8F%AF%E8%BF%BD%E9%97%AE%E7%9A%84RAG/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-007",
+    "slug": "rag-foundations",
+    "title": "RAG核心原理与工程落地详解：从Naive RAG到Agentic RAG",
+    "category": "Agent",
+    "date": "2026-04-16",
+    "minutes": 2,
+    "tags": [
+      "Agent",
+      "Java八股"
+    ],
+    "lead": "本文系统梳理RAG（Retrieval-Augmented Generation）的核心原理与工程实践，覆盖Naive RAG、Advanced RAG、Agentic RAG三种范式，对检索优化、评估指标和常见故障排查给出可落地方法，并结合Spring AI与LangChain4j提供Java生态实现思路，帮助你在面试和实战中都能讲清、做对、调优。",
+    "sections": [
+      {
+        "heading": "一、什么是RAG，为什么需要RAG？",
+        "paragraphs": [
+          "RAG（Retrieval-Augmented Generation）即“检索增强生成”，核心思想是：",
+          "在生成答案前，先从外部知识库检索相关信息，再将检索结果注入Prompt，最后让LLM基于“问题+证据”生成答案。",
+          "仅靠大模型参数记忆，常见问题有："
+        ]
+      },
+      {
+        "heading": "二、RAG的核心流程与系统架构",
+        "paragraphs": [
+          "召回率优先：先“找得到”再“答得好”。",
+          "证据质量优先：无关上下文越多，答案越容易偏离。",
+          "可观测性优先：必须记录每一步中间结果，才能定位故障。"
+        ],
+        "code": "离线阶段：\n文档采集 -> 清洗 -> Chunk切分 -> Embedding -> 向量索引构建\n\n在线阶段：\n用户问题 -> Query改写 -> 检索召回 -> Rerank重排 -> Prompt拼接 -> LLM生成 -> 引用返回",
+        "language": "text"
+      },
+      {
+        "heading": "三、三种RAG范式：Naive、Advanced、Agentic",
+        "paragraphs": [
+          "标准流程：向量检索 -> 拼接上下文 -> 生成答案。",
+          "❌ 对长文档和复杂问题效果不稳定",
+          "Hybrid Retrieval（BM25 + Vector）"
+        ],
+        "code": "User Query\n   -> Planner\n      -> Tool Call 1 (Vector Search)\n      -> Tool Call 2 (SQL/Graph)\n      -> Tool Call 3 (Web)\n   -> Evidence Merge\n   -> Final Generation",
+        "language": "text"
+      }
+    ],
+    "source": {
+      "path": "Java/Agent开发/RAG核心原理与工程落地详解.md",
+      "url": "https://hansen.dpdns.org/2026/04/16/Java/Agent%E5%BC%80%E5%8F%91/RAG%E6%A0%B8%E5%BF%83%E5%8E%9F%E7%90%86%E4%B8%8E%E5%B7%A5%E7%A8%8B%E8%90%BD%E5%9C%B0%E8%AF%A6%E8%A7%A3/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-008",
+    "slug": "peft",
+    "title": "参数高效微调PEFT",
+    "category": "LLM",
+    "date": "2025-03-30",
+    "minutes": 3,
+    "tags": [
+      "transformer",
+      "LLM"
+    ],
+    "lead": "本文介绍了参数高效微调PEFT的几种方法：BitFit,Prompt-Tuning,P-Tuning,Prefix-Tuning,Lora,IA3.PEFT进阶操作",
+    "sections": [
+      {
+        "heading": "内容选读",
+        "paragraphs": [
+          "随着预训练语言模型的不断发展，模型的参数越来越多，更大的模型带来了更好的性能，但是也带来了一些问题，比如以传统微调的方式对模型进行全量参数更新会消耗巨大的计算与存储资源。 参数高效微调(Parameter-efficient fine-tuning, PEFT)的方法仅对模型的一小部分参数进行训练，这一小部分参数可能是模型自身的，也可能是外部引入的，通过这种训练方式，不仅能够极大地减少需要训练的参数量，一些场景下效果甚至不输于全量微调。 常见的参数高效微调方法见下图： (图片来源：Scaling Down to Scale Up:A Guide to Parameter-Efficient Fine-Tuning)",
+          "本文使用的基础模型为Langboat/bloom-1b4-zh，模型大小为1.4B 在实际使用时参数量大概为1.3B",
+          "所以我们可以大概进行计算 model size: 1.3B 由于LP32的一个参数差不多4字节，所以model: 1.3G  4 = 5.2G 梯度gradient: 1.3G  4 = 5.2G 优化optimizer: 1.3G  4  2 =10.4G 所以一共需要的内存大约是20.8G"
+        ]
+      },
+      {
+        "heading": "1.1 BitFit原理",
+        "paragraphs": [
+          "BitFit思想：在进行训练时只训练一部分参数，BitFit选择就是只训练模型参数里面的所有bias部分，也就是偏置值，而冻结所有其他参数，从而减少计算和存储成本，同时保持较好的下游任务性能 实现方法：只需要把所有非bias部分的是否需要计算梯度设置为fase即可"
+        ]
+      },
+      {
+        "heading": "1.2 代码实现",
+        "paragraphs": [
+          "经过优化后的模型参数量约为544768个，相当于优化前的参数量1303111680的0.418% 显存占用率也明显下降"
+        ],
+        "code": "# bitfit\n# 选择模型参数里面的所有bias部分\n\nnum_param = 0\n# 遍历模型中的所有参数\nfor name, param in model.named_parameters():\n    # 如果参数名不是bias，就将其梯度计算设置为false\n    if \"bias\" not in name:\n        param.requires_grad = False\n    else:\n        num_param += param.numel()\n\nnum_param",
+        "language": "python"
+      }
+    ],
+    "source": {
+      "path": "LLM/参数高效微调PEFT.md",
+      "url": "https://hansen.dpdns.org/2025/03/30/LLM/%E5%8F%82%E6%95%B0%E9%AB%98%E6%95%88%E5%BE%AE%E8%B0%83PEFT/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-009",
+    "slug": "transformer",
+    "title": "Transformer原理及代码实现",
+    "category": "深度学习",
+    "date": "2024-11-01",
+    "minutes": 2,
+    "tags": [
+      "transformer",
+      "深度学习"
+    ],
+    "lead": "Transformer原理及代码实现",
+    "sections": [
+      {
+        "heading": "1.1 什么是Transformer",
+        "paragraphs": [
+          "Transformer 是一种深度学习模型架构，主要用于处理序列数据，比如自然语言处理（NLP）中的文本序列任务。它由 Google 研究团队在 2017 年提出，并在论文《Attention Is All You Need》中正式发布。Transformer 的关键创新在于自注意力机制，通过它，模型能够捕捉序列中每个位置之间的依赖关系，而不需要传统的递归（RNN）或卷积（CNN）结构。"
+        ]
+      },
+      {
+        "heading": "1.2 Transformer的核心组成",
+        "paragraphs": [
+          "Transformer 主要由 Encoder 和 Decoder 两个模块组成：",
+          "Encoder：用于处理输入序列，比如输入文本。一个 Transformer 通常包含多个 Encoder 层堆叠，每层的 Encoder 会计算序列中每个词与其他词的关系，提取特征并捕捉依赖关系。Encoder 的输出可以作为 Decoder 的输入。",
+          "Decoder：用于生成目标序列，比如翻译任务中的输出文本。Decoder 也由多个层堆叠而成，负责在给定输入编码的情况下生成输出，同时自我监督生成的内容，确保输出的每个词不会看到未来的词。"
+        ]
+      },
+      {
+        "heading": "1.3 Transformer的主要特点",
+        "paragraphs": [
+          "自注意力机制（Self-Attention Mechanism）： Transformer 使用自注意力机制，允许模型直接关注序列中任意位置的单词或符号，生成包含上下文信息的向量表示。通过自注意力，模型可以计算序列中任意两个位置之间的关系权重，捕捉长距离依赖关系。",
+          "多头注意力（Multi-Head Attention）： 为了让模型可以从多个不同的“视角”关注输入，Transformer 引入多头注意力机制。每个注意力头会独立地学习一组权重，然后将结果拼接在一起。多头注意力可以让模型在不同的头中学习到不同的特征或上下文信息。",
+          "位置编码（Positional Encoding）： 因为 Transformer 没有顺序处理输入，因此需要位置编码来向模型提供序列顺序信息。位置编码通常是加到输入嵌入上的一组向量，表示每个位置的相对或绝对位置。"
+        ]
+      }
+    ],
+    "source": {
+      "path": "Deep Learning/Transformer.md",
+      "url": "https://hansen.dpdns.org/2024/11/01/Deep%20Learning/Transformer/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-010",
+    "slug": "two-sum",
+    "title": "Leetcode 1.两数之和",
+    "category": "Leetcode",
+    "date": "2025-03-31",
+    "minutes": 2,
+    "tags": [
+      "Leetcode"
+    ],
+    "lead": "Leetcode 1.两数之和",
+    "sections": [
+      {
+        "heading": "题目要求",
+        "paragraphs": [
+          "给定一个整数数组 nums 和一个整数目标值 target，请你在该数组中找出 和为目标值 target  的那 两个 整数，并返回它们的数组下标。",
+          "你可以假设每种输入只会对应一个答案，并且你不能使用两次相同的元素。",
+          "示例 1： 输入：nums = [2,7,11,15], target = 9 输出：[0,1] 解释：因为 nums[0] + nums[1] == 9 ，返回 [0, 1] 。"
+        ]
+      },
+      {
+        "heading": "提交",
+        "paragraphs": [
+          "这道题中我们不仅需要判断某元素是否存在，而且还需要知道该元素在原数组中的下标 所以利用HashMap存储我们遍历过的nums里的元素作为key，其下标作为value 遍历nums并查询我们想要找的数target - nums[i]是否存在，如果存在就是我们想要找的连个元素，放进result中即可 如果不存在，则把当前元素及其下标放入HashMap中，继续向后遍历nums"
+        ],
+        "code": "class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        HashMap<Integer, Integer> map = new HashMap<>();\n        int[] result = new int[2];\n\n        for (int i = 0; i < nums.length; i++) {\n            if (map.containsKey(target - nums[i])) {\n                result[0] = i;\n                result[1] = map.get(target - nums[i]);\n            }else{\n                map.put(nums[i], i);\n            }\n        }\n        return result;\n    }\n}",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/Leetcode/Day17_Leetcode1.两数之和.md",
+      "url": "https://hansen.dpdns.org/2025/03/31/Java/Leetcode/Day17_Leetcode1.%E4%B8%A4%E6%95%B0%E4%B9%8B%E5%92%8C/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-011",
+    "slug": "binary-search",
+    "title": "Leetcode 704.二分查找",
+    "category": "Leetcode",
+    "date": "2025-03-16",
+    "minutes": 3,
+    "tags": [
+      "Leetcode"
+    ],
+    "lead": "Leetcode 704.二分查找",
+    "sections": [
+      {
+        "heading": "题目要求",
+        "paragraphs": [
+          "给定一个 n 个元素有序的（升序）整型数组 nums 和一个目标值 target  ，写一个函数搜索 nums 中的 target，如果目标值存在返回下标，否则返回 -1。",
+          "示例 1： 输入: nums = [-1,0,3,5,9,12], target = 9 输出: 4 解释: 9 出现在 nums 中并且下标为 4 示例 2： 输入: nums = [-1,0,3,5,9,12], target = 2 输出: -1 解释: 2 不存在 nums 中因此返回 -1"
+        ]
+      },
+      {
+        "heading": "提交",
+        "paragraphs": [],
+        "code": "class Solution {\n    public int search(int[] nums, int target) {\n        int high = nums.length - 1; \n        int low = 0;\n        while (low <= high) {\n            //求出中间位置\n            int mid = (low + high) / 2; \n            //如果mid位置元素等于target则直接返回mid\n            if (nums[mid] == target) {\n                return mid;\n            }else if (nums[mid] < target) {\n                low = mid + 1;  //如果中间位置小于target，则去数组的右半边找，即把low移动到中间 \n            }else {\n                high = mid - 1;  //如果中间位置大于target，则去数组的左半边找，即把high移动到中间 \n            }\n        }\n        return -1;\n    }\n}",
+        "language": "java"
+      },
+      {
+        "heading": "官方答案",
+        "paragraphs": [
+          "思路及算法： 在升序数组 nums 中寻找目标值 target，对于特定下标 i，比较 nums[i] 和 target 的大小：",
+          "如果 nums[i]=target，则下标 i 即为要寻找的下标；",
+          "如果 nums[i]>target，则 target 只可能在下标 i 的左侧；"
+        ],
+        "code": "class Solution {\n    public int search(int[] nums, int target) {\n        int left = 0, right = nums.length - 1;\n        while (left <= right) {\n            int mid = (right - left) / 2 + left;\n            int num = nums[mid];\n            if (num == target) {\n                return mid;\n            } else if (num > target) {\n                right = mid - 1;\n            } else {\n                left = mid + 1;\n            }\n        }\n        return -1;\n    }\n}",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/Leetcode/Day4_Leetcode 704.二分查找.md",
+      "url": "https://hansen.dpdns.org/2025/03/16/Java/Leetcode/Day4_Leetcode%20704.%E4%BA%8C%E5%88%86%E6%9F%A5%E6%89%BE/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-012",
+    "slug": "reverse-list",
+    "title": "Leetcode 206.反转链表",
+    "category": "Leetcode",
+    "date": "2025-03-20",
+    "minutes": 2,
+    "tags": [
+      "Leetcode"
+    ],
+    "lead": "Leetcode 206.反转链表",
+    "sections": [
+      {
+        "heading": "题目要求",
+        "paragraphs": [
+          "给你单链表的头节点 head ，请你反转链表，并返回反转后的链表。",
+          "示例 1：  输入：head = [1,2,3,4,5] 输出：[5,4,3,2,1] 示例 2：  输入：head = [1,2] 输出：[2,1] 示例 3： 输入：head = [] 输出：[]"
+        ]
+      },
+      {
+        "heading": "提交",
+        "paragraphs": [],
+        "code": "/**\n * Definition for singly-linked list.\n * public class ListNode {\n *     int val;\n *     ListNode next;\n *     ListNode() {}\n *     ListNode(int val) { this.val = val; }\n *     ListNode(int val, ListNode next) { this.val = val; this.next = next; }\n * }\n */\nclass Solution {\n    public ListNode reverseList(ListNode head) {\n        ListNode prev = null;\n        ListNode cur = head;\n        ListNode temp = null;\n        while (cur != null) {\n            temp = cur.next;// 保存下一个节点\n            cur.next = prev;\n            prev = cur;\n            cur = temp;\n        }\n        return prev;\n    }\n}",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/Leetcode/Day8_Leetcode 206.反转链表.md",
+      "url": "https://hansen.dpdns.org/2025/03/20/Java/Leetcode/Day8_Leetcode%20206.%E5%8F%8D%E8%BD%AC%E9%93%BE%E8%A1%A8/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-013",
+    "slug": "hyperbert",
+    "title": "HyperBERT:Mixing Hypergraph-Aware Layers with Language Models for Node Classification on Text-Attributed Hypergraphs",
+    "category": "paper",
+    "date": "2025-03-26",
+    "minutes": 1,
+    "tags": [
+      "paper",
+      "LLM",
+      "Hypergraph"
+    ],
+    "lead": "paper阅读：HyperBERT:Mixing Hypergraph-Aware Layers with Language Models for Node Classification on Text-Attributed Hypergraphs",
+    "sections": [
+      {
+        "heading": "HyperBERT 单层结构",
+        "paragraphs": [
+          "一个 单层 HyperBERT 主要由两个并行的分支组成：",
+          "语义表示层（Semantic Representation Layer）",
+          "通过 BERT 计算每个超图节点的文本语义表示 $X^\\ellS$。"
+        ]
+      },
+      {
+        "heading": "HyperBERT 单层结构总结",
+        "paragraphs": [
+          "单个 HyperBERT 层的完整流程如下：",
+          "输入：节点的文本属性 $ si $ 和超图结构。",
+          "语义表示层：使用 BERT 计算文本嵌入 $ X^\\ellS $。"
+        ]
+      },
+      {
+        "heading": "HyperBERT 单层 vs 标准 GNN 层",
+        "paragraphs": [
+          "HyperBERT 单层 结合 BERT（文本语义）+ HGNN（超图结构），使模型既能理解文本语义，又能捕捉超图结构。",
+          "其核心是 两个分支并行计算，然后相加融合，确保文本和超图信息都能有效地用于节点分类任务。"
+        ]
+      }
+    ],
+    "source": {
+      "path": "paper/HyperBERT.md",
+      "url": "https://hansen.dpdns.org/2025/03/26/paper/HyperBERT/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-014",
+    "slug": "bioserc",
+    "title": "BiosERC:Integrating Biography Speakers Supported by LLMs for ERC Tasks",
+    "category": "paper",
+    "date": "2025-03-17",
+    "minutes": 2,
+    "tags": [
+      "paper",
+      "LLM",
+      "ERC"
+    ],
+    "lead": "paper阅读：BiosERC:Integrating Biography Speakers Supported by LLMs for ERC Tasks",
+    "sections": [
+      {
+        "heading": "BiosERC 的具体流程",
+        "paragraphs": [
+          "BiosERC 是一种用于 对话情绪识别 (ERC) 的新方法，它的核心思想是 利用大语言模型 (LLM) 提取说话者的“传记信息”（biographical information），并将其融入情绪识别任务。该方法的主要流程如下："
+        ]
+      },
+      {
+        "heading": "1. 输入建模",
+        "paragraphs": [
+          "BiosERC 以 对话 (Conversation) $C$ 作为输入，其中每个对话由一系列话语 (utterances) 组成： $$ C = {ui}{0 \\leq i < |C|} $$ 其中，每个话语 $ui$ 由 说话者 $p(ui)$ 发表，即： $$ p(ui) \\in S, \\quad S = {sj}{0 \\leq j < |S|} $$ 表示该对话中涉及的所有说话者。"
+        ]
+      },
+      {
+        "heading": "2. 生成说话者传记信息 (Biography Extraction)",
+        "paragraphs": [
+          "BiosERC 采用 大语言模型 (LLM, 例如 Llama-2)，通过提示工程 (Prompting) 生成每位说话者的描述信息。 该过程如下： $$ dj = \\text{LLMs(prompting}(C, sj)) $$",
+          "输入： 对话 $C$ 和说话者 ID $sj$。",
+          "输出： 说话者 $sj$ 的个性描述 $dj$（如“X 说话直率，经常表现出幽默感”）。"
+        ]
+      }
+    ],
+    "source": {
+      "path": "paper/BiosERC.md",
+      "url": "https://hansen.dpdns.org/2025/03/17/paper/BiosERC/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-015",
+    "slug": "dianping-01",
+    "title": "黑马点评开发日志Day01——项目介绍、环境搭建及短信登录功能",
+    "category": "Java",
+    "date": "2025-08-16",
+    "minutes": 2,
+    "tags": [
+      "Java",
+      "黑马点评"
+    ],
+    "lead": "黑马点评开发日志Day01——项目介绍、环境搭建及短信登录功能",
+    "sections": [
+      {
+        "heading": "一、项目介绍",
+        "paragraphs": [
+          "使用redis共享session来实现",
+          "包含缓存击穿，缓存穿透，缓存雪崩等内容",
+          "使用Redis的计数器功能，结合Lua完成高性能的redis操作，同时学习Redis分布式锁的原理，包括Redis的三种消息队列"
+        ]
+      },
+      {
+        "heading": "二、环境搭建",
+        "paragraphs": [
+          "新建数据库hmdp，导入hmdp.sql文件。",
+          "步骤：新建数据库hmdp->右键sql脚本->选择hmdp.sql文件->点击执行",
+          "tbuserinfo：用户详情表"
+        ]
+      },
+      {
+        "heading": "三、基于Session实现短信登录功能",
+        "paragraphs": [
+          "问题：当session请求变多时，每一个session都要单独进行校验，浪费资源",
+          "为了保护用户隐私，使用UserDTO代替User作为返回结果，以隐藏用户关键信息"
+        ],
+        "code": "/**\n  * 发送手机验证码\n  */\n@PostMapping(\"code\")\npublic Result sendCode(@RequestParam(\"phone\") String phone, HttpSession session) {\n    // 发送短信验证码并保存验证码\n    return userService.sendCode(phone, session);\n}",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/项目开发/黑马点评/黑马点评Day01.md",
+      "url": "https://hansen.dpdns.org/2025/08/16/Java/%E9%A1%B9%E7%9B%AE%E5%BC%80%E5%8F%91/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84Day01/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-016",
+    "slug": "dianping-02",
+    "title": "黑马点评开发日志Day02——商户查询缓存",
+    "category": "Java",
+    "date": "2025-08-18",
+    "minutes": 2,
+    "tags": [
+      "Java",
+      "黑马点评"
+    ],
+    "lead": "黑马点评开发日志Day02——商户查询缓存",
+    "sections": [
+      {
+        "heading": "一、缓存",
+        "paragraphs": [
+          "缓存就是数据交换的缓冲区（称作Cache），是存储数据的临时地方，一般读写性能较高"
+        ]
+      },
+      {
+        "heading": "二、商户查询缓存",
+        "paragraphs": [],
+        "code": "/**\n * 根据id查询商铺信息\n * @param id 商铺id\n * @return 商铺详情数据\n */\n@GetMapping(\"/{id}\")\npublic Result queryShopById(@PathVariable(\"id\") Long id) {\n    return shopService.queryById(id);\n}",
+        "language": "java"
+      },
+      {
+        "heading": "三、商铺类型查询缓存",
+        "paragraphs": [],
+        "code": "@RestController\n@RequestMapping(\"/shop-type\")\npublic class ShopTypeController {\n    @Resource\n    private IShopTypeService typeService;\n\n    @GetMapping(\"list\")\n    public Result queryTypeList() {\n//      List<ShopType> types = typeService.query().orderByAsc(\"sort\").list();\n        List<ShopType> typeList = typeService.queryTypeList();\n        return Result.ok(typeList);\n    }\n}",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/项目开发/黑马点评/黑马点评Day02.md",
+      "url": "https://hansen.dpdns.org/2025/08/18/Java/%E9%A1%B9%E7%9B%AE%E5%BC%80%E5%8F%91/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84/%E9%BB%91%E9%A9%AC%E7%82%B9%E8%AF%84Day02/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-017",
+    "slug": "sky-01",
+    "title": "苍穹外卖开发日志Day01——环境搭建",
+    "category": "Java",
+    "date": "2025-06-03",
+    "minutes": 3,
+    "tags": [
+      "Java",
+      "苍穹外卖"
+    ],
+    "lead": "苍穹外卖开发日志Day01——环境搭建",
+    "sections": [
+      {
+        "heading": "一、项目介绍",
+        "paragraphs": [
+          "项目定位：专门为餐饮企业定制的一款软件产品",
+          "功能架构：体现项目中的业务功能模块",
+          "产品原型：展示了苍穹外卖的产品原型，一般由产品经理设计"
+        ]
+      },
+      {
+        "heading": "二、环境搭建",
+        "paragraphs": [
+          "后端工程基于maven进行项目构建，并且进行分模块开发 项目结构：",
+          "sky-take-out：maven父工程，统一管理依赖版本，聚合其他子模块",
+          "sky-common：子模块，存放公共类，例如：工具类、常量类、异常类等"
+        ],
+        "code": "server {\n    listen       8082;\n    server_name  localhost;\n\n    location /api/ {\n        proxy_pass http://localhost:8080/admin/;  # 反向代理\n    }\n}",
+        "language": "conf"
+      },
+      {
+        "heading": "三、登录功能完善",
+        "paragraphs": [
+          "修改数据库中明文密码，改为MD5加密后的密文",
+          "修改登录功能，使用MD5加密密码进行比对",
+          "EmployeeServiceImpl.java"
+        ],
+        "code": "@Service\npublic class EmployeeServiceImpl implements EmployeeService {\n\n    @Autowired\n    private EmployeeMapper employeeMapper;\n\n    /**\n     * 员工登录\n     *\n     * @param employeeLoginDTO\n     * @return\n     */\n    public Employee login(EmployeeLoginDTO employeeLoginDTO) {\n        String username = employeeLoginDTO.getUsername();\n        String password = employeeLoginDTO.getPassword();\n\n        //1、根据用户名查询数据库中的数据\n        Employee employee = employeeMapper.getByUsername(username);\n\n        //2、处理各种异常情况（用户名不存在、密码不对、账号被锁定）\n        if (employee == null) {\n            //账号不存在\n            throw new AccountNotFoundException(MessageConstant.ACCOUNT_NOT_FOUND);\n        }\n\n        //密码比对\n        //进行md5加密，然后再进行比对\n        password = DigestUtils.md5DigestAsHex(password.getBytes());\n        if (!password.equals(employee.getPassword())) {\n            //密码错误\n            throw new PasswordErrorException(MessageConstant.PASSWORD_ERROR);\n        }",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/项目开发/苍穹外卖/苍穹外卖Day01.md",
+      "url": "https://hansen.dpdns.org/2025/06/03/Java/%E9%A1%B9%E7%9B%AE%E5%BC%80%E5%8F%91/%E8%8B%8D%E7%A9%B9%E5%A4%96%E5%8D%96/%E8%8B%8D%E7%A9%B9%E5%A4%96%E5%8D%96Day01/"
+    },
+    "excerpt": true
+  },
+  {
+    "id": "H-018",
+    "slug": "sky-02",
+    "title": "苍穹外卖开发日志Day02——员工管理",
+    "category": "Java",
+    "date": "2025-06-04",
+    "minutes": 3,
+    "tags": [
+      "Java",
+      "苍穹外卖"
+    ],
+    "lead": "苍穹外卖开发日志Day02——员工管理",
+    "sections": [
+      {
+        "heading": "一、新增员工",
+        "paragraphs": [
+          "数据库设计（employee表）",
+          "当前端提交的数据和实体类中对应的属性差别较大时，建议使用DTO来封装数据",
+          "注意点：需要在ServiceImpl中将DTO转换为实体类，并设置其他属性"
+        ],
+        "code": "@Data\npublic class EmployeeDTO implements Serializable {\n\n    private Long id;\n\n    private String username;\n\n    private String name;\n\n    private String phone;\n\n    private String sex;\n\n    private String idNumber;\n}",
+        "language": "java"
+      },
+      {
+        "heading": "二、员工分页查询",
+        "paragraphs": [
+          "分页查询需要使用PageHelper插件进行分页处理",
+          "PageHelper.startPage方法底层也是使用ThreadLocal来存储分页信息，然后直接拼接在SQL语句中，所以SQL语句中不需要使用limit关键字",
+          "方法一：在实体类中使用@JsonFormat注解进行格式化"
+        ],
+        "code": "@Data\npublic class EmployeePageQueryDTO implements Serializable {\n\n    //员工姓名\n    private String name;\n\n    //页码\n    private int page;\n\n    //每页显示记录数\n    private int pageSize;\n}",
+        "language": "java"
+      },
+      {
+        "heading": "三、启用禁用员工账号",
+        "paragraphs": [
+          "可以对状态为“启用”的员工账号进行“禁用”操作",
+          "可以对状态为“禁用”的员工账号进行“启用”操作",
+          "状态为“禁用”的员工账号不能登录系统"
+        ],
+        "code": "/**\n * 启用禁用员工账号\n *\n * @param status\n * @param ids\n * @return\n */\n@PostMapping(\"/status/{status}\")\n@ApiOperation(\"启用禁用员工账号\")\npublic Result status(@PathVariable Integer status, @RequestParam List<Long> ids) {\n    log.info(\"启用禁用员工账号：{}，{}\", status, ids);\n    employeeService.status(status, ids);\n    return Result.success();\n}",
+        "language": "java"
+      }
+    ],
+    "source": {
+      "path": "Java/项目开发/苍穹外卖/苍穹外卖Day02.md",
+      "url": "https://hansen.dpdns.org/2025/06/04/Java/%E9%A1%B9%E7%9B%AE%E5%BC%80%E5%8F%91/%E8%8B%8D%E7%A9%B9%E5%A4%96%E5%8D%96/%E8%8B%8D%E7%A9%B9%E5%A4%96%E5%8D%96Day02/"
+    },
+    "excerpt": true
+  }
+]

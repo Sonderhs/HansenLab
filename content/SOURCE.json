@@ -1,0 +1,116 @@
+{
+  "selected": 18,
+  "originalPosts": 390,
+  "extracted": "2026-10-22",
+  "source": "User-provided blog backup; source files read only. Original metadata retained; body is an excerpt, not a full migration.",
+  "files": [
+    {
+      "slug": "clickhouse-01",
+      "path": "Java/ClickHouse/ClickHouse学习笔记（一）：从订单报表理解列式存储与OLAP.md",
+      "sha256": "63be8bb0328e164782888a6ec034fcfa7bcd748945e1d4d66823174dac96a13d",
+      "excerptOnly": true
+    },
+    {
+      "slug": "clickhouse-02",
+      "path": "Java/ClickHouse/ClickHouse学习笔记（二）：Docker部署与SQL入门实战.md",
+      "sha256": "17dbce1a836342058a1d077cdd382bf406e7cb01449a906eef465a443fad1921",
+      "excerptOnly": true
+    },
+    {
+      "slug": "clickhouse-03",
+      "path": "Java/ClickHouse/ClickHouse学习笔记（三）：MergeTree分区排序与稀疏索引.md",
+      "sha256": "c1b98498aebcbb4418f593d4dfd4e947abb838f210fed9553ae5517471ec43f4",
+      "excerptOnly": true
+    },
+    {
+      "slug": "go-concurrency",
+      "path": "Go/Go基础学习/Go并发编程.md",
+      "sha256": "f0ff45e7e1aa404b5e8ef62a23ab71efbb07a7cc1a27cfde4f1dc6389cebbf97",
+      "excerptOnly": true
+    },
+    {
+      "slug": "go-context",
+      "path": "Go/Go八股/Context面试题.md",
+      "sha256": "6734ebc78b2632530d0f3352e3c05322f2fa941fcaaea3dcace15dc4e7f98ed0",
+      "excerptOnly": true
+    },
+    {
+      "slug": "neko-rag",
+      "path": "Agent/Neko博客助手设计：从关键词匹配到可追问的RAG.md",
+      "sha256": "9b98107c95acb849b601dbb8e59207b6858cb3994acd22f1b809a0d9f567e570",
+      "excerptOnly": true
+    },
+    {
+      "slug": "rag-foundations",
+      "path": "Java/Agent开发/RAG核心原理与工程落地详解.md",
+      "sha256": "3402dcdca0bef196e65abe02e6c78a09bf3a72afa69f378e17faf4203e3bb533",
+      "excerptOnly": true
+    },
+    {
+      "slug": "peft",
+      "path": "LLM/参数高效微调PEFT.md",
+      "sha256": "4172877eecc896cac0dee16fd94f363ad7044da2fc560e9ee7a8302f1f189333",
+      "excerptOnly": true
+    },
+    {
+      "slug": "transformer",
+      "path": "Deep Learning/Transformer.md",
+      "sha256": "d9bf57d7f3e9b58d6610f12dcff5ee77c081a3046e04a13440b9fb7c320a1373",
+      "excerptOnly": true
+    },
+    {
+      "slug": "two-sum",
+      "path": "Java/Leetcode/Day17_Leetcode1.两数之和.md",
+      "sha256": "670af883585a9cc8c1568d773c4fae8dc9c5700cbab7be6e45012f351cce8ba4",
+      "excerptOnly": true
+    },
+    {
+      "slug": "binary-search",
+      "path": "Java/Leetcode/Day4_Leetcode 704.二分查找.md",
+      "sha256": "d47bbe7e31ac8df80116042a9729f593fd958fc9cf96639261811064127b5e53",
+      "excerptOnly": true
+    },
+    {
+      "slug": "reverse-list",
+      "path": "Java/Leetcode/Day8_Leetcode 206.反转链表.md",
+      "sha256": "64ef9b19ecd849f109f19b37c1786285ca64bf609f5b514601cdc4a4a7e08536",
+      "excerptOnly": true
+    },
+    {
+      "slug": "hyperbert",
+      "path": "paper/HyperBERT.md",
+      "sha256": "45dbe8517c70923ae992b30e587b1eb2faeffd2763cd12b8be8f8307da37346f",
+      "excerptOnly": true
+    },
+    {
+      "slug": "bioserc",
+      "path": "paper/BiosERC.md",
+      "sha256": "844e2817eca802e633321ff819daf851df6a1434a3a254a97a8a56c00498a6ab",
+      "excerptOnly": true
+    },
+    {
+      "slug": "dianping-01",
+      "path": "Java/项目开发/黑马点评/黑马点评Day01.md",
+      "sha256": "8d7690fa4a9c022e09d192f9a33572aa0971e0b77c613a4216eab10289086904",
+      "excerptOnly": true
+    },
+    {
+      "slug": "dianping-02",
+      "path": "Java/项目开发/黑马点评/黑马点评Day02.md",
+      "sha256": "922dbcc13df0494e40087abd76e3c2b9da3543d2f6631981807b3d0154e13758",
+      "excerptOnly": true
+    },
+    {
+      "slug": "sky-01",
+      "path": "Java/项目开发/苍穹外卖/苍穹外卖Day01.md",
+      "sha256": "0cbd9d37ff4238ac3f3a8e1f39e2c267738cf4058b2f2d758147a9e556c34ad8",
+      "excerptOnly": true
+    },
+    {
+      "slug": "sky-02",
+      "path": "Java/项目开发/苍穹外卖/苍穹外卖Day02.md",
+      "sha256": "4673f8bc298856e66a526249d2c4ee7c09f29301c56abc5419dd30c762aecfaf",
+      "excerptOnly": true
+    }
+  ]
+}

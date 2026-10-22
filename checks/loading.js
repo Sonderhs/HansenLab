@@ -16,7 +16,7 @@ async (page) => {
   check(await page.locator('#boot-intro').isVisible(),'Skip does not falsely mark pending resources ready')
   await page.getByRole('button',{name:'先浏览文章目录',exact:true}).click()
   await page.getByRole('dialog',{name:/文章目录/}).waitFor()
-  await page.getByRole('searchbox',{name:'搜索文章'}).fill('玻璃')
+  await page.getByRole('searchbox',{name:'搜索文章'}).fill('Neko')
   check(await page.locator('.result').count()===1,'Articles are searchable before scene loads')
   await page.locator('.result').click()
   await page.locator('#reader').waitFor({state:'visible'})
