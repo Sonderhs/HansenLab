@@ -1,5 +1,7 @@
-;async (page) => {
+async (page) => {
   await page.goto("http://127.0.0.1:5175/?profile=1")
+  await page.locator('#boot-intro').waitFor({ state: 'attached' })
+  if (await page.locator('[data-intro-skip]').isVisible()) await page.locator('[data-intro-skip]').click()
   await page.locator('#home[data-ready="true"]').waitFor()
   const output = { checks: [] }
   const check = (condition, name) => {

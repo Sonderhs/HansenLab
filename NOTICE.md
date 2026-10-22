@@ -15,3 +15,7 @@ Hansen Lab 源自 [LBEILC/RhineLabUI](https://github.com/LBEILC/RhineLabUI)，�
 ## 模型复现
 
 art/rhine-archive.blend 与 art/archive-assembly.blend 对应 public/assets/ 的两个 GLB。art/build_archive.py 和 art/build_assembly.py 共用 clear_reference_details.py、internal_architecture.py、shell_reference_details.py。资源修改应通过 Blender MCP 执行这些脚本并保留源工程；无需 Blender 即可安装、运行与构建网站。
+
+## Hansen Lab 开场（2026-10-22）
+
+复用 RhineLabUI 的 boot-motion.ts、boot-tracks.ts、boot-orbit-tracks.ts、boot-logo-tracks.ts，保留逐帧测量轨迹。Hansen 的 DOM/SVG 渲染、品牌笔画、真实加载衔接、跳过与重播单独实现。开场文字使用已随项目分发的 MiSans；未复制 BootLettering、Novecento 或原片音频。新增来源哈希记录于 docs/SOURCE-MANIFEST.json。

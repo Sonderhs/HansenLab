@@ -1,1 +1,3 @@
 src/fonts.css
+# CLI inputs are bare function expressions, not JS statement files.
+checks/*.js

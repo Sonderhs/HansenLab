@@ -4074,6 +4074,34 @@
       "source": "verification/hansen-performance/results.json",
       "destination": "verification/performance-results.json",
       "sha256": "c18cf66d7fac38a6cf93fcd487ef61d9d5fb95d7d150f1c975dc81168d494f70"
+    },
+    {
+      "source": "src/boot-motion.ts",
+      "destination": "src/boot-motion.ts",
+      "sha256": "2619e517878efe49f4c3e5e4052dfdab11759e3b45e665b568c38d20e3dac2d4",
+      "extracted": "2026-10-22",
+      "note": "Hansen Lab text adaptation; original timing retained."
+    },
+    {
+      "source": "src/boot-tracks.ts",
+      "destination": "src/boot-tracks.ts",
+      "sha256": "3163389299c486367c1b96e3aca412501ed7093acbffba3266944feaeb90acc0",
+      "extracted": "2026-10-22",
+      "note": "Original motion tracks reused unchanged."
+    },
+    {
+      "source": "src/boot-orbit-tracks.ts",
+      "destination": "src/boot-orbit-tracks.ts",
+      "sha256": "ba21662b3c108701d63a169662d66845a302603a62c97e19e676823218abcf10",
+      "extracted": "2026-10-22",
+      "note": "Original motion tracks reused unchanged."
+    },
+    {
+      "source": "src/boot-logo-tracks.ts",
+      "destination": "src/boot-logo-tracks.ts",
+      "sha256": "3311a6cf99edefa4175ecd3d89c80f21a40f56551b9980fac4b1e17f5bb0df90",
+      "extracted": "2026-10-22",
+      "note": "Original motion tracks reused unchanged."
     }
   ]
 }

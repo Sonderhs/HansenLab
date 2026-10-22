@@ -1,4 +1,5 @@
 import { labelMarkSvg as labelMark } from "./brand";
+import { BlogBoot } from "./boot-intro";
 import "./fonts.css";
 import "@kitlangton/rolling-number/styles.css";
 import "./style.css";
@@ -24,6 +25,9 @@ let qualityMode: "original" | "performance" = "original";
 let reduced = motionQuery.matches;
 let selected = 16;
 let ready = false;
+let bootActive = true;
+let sceneFailed = false;
+let boot: BlogBoot;
 let scene: ArchiveScene | undefined;
 let reading = false;
 let sceneFrame = 0;
@@ -52,9 +56,9 @@ $("#app").innerHTML = `
     <div class="lane-controls"><button data-action="lane-prev" aria-label="上一分类">←</button><div><span class="eyebrow" id="lane-number"></span><strong id="lane-title"></strong></div><button data-action="lane-next" aria-label="下一分类">→</button></div>
     <div class="row-controls"><button data-action="row-prev" aria-label="上一篇">↑</button><div id="ticks"></div><button data-action="row-next" aria-label="下一篇">↓</button></div>
     <div class="browse-hint">拖动探索 <span>／</span> 滚轮切换 <span>／</span> <kbd>↵</kbd> 打开记录</div>
-    <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
+    <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
     <div id="hover" hidden></div>
-    <div id="loading" role="status"><span>${mark}</span><b>HANSEN LAB</b><p>正在连接三维档案库…</p><i></i><button data-action="index">先浏览文章目录 →</button></div>
+    <div id="loading" role="status" hidden><span>${mark}</span><b>HANSEN LAB</b><p>正在连接三维档案库…</p><i></i><button data-action="index">先浏览文章目录 →</button></div>
   </div>
   <section id="reader" aria-label="文章阅读" hidden><header class="reader-header"><a href="#" class="reader-brand">${mark} HANSEN LAB</a><span>RESEARCH · BUILD · RECORD</span><a href="#" class="return-home">← 返回三维档案</a></header><div class="reader-layout"><aside id="toc" aria-label="文章目录"></aside><article id="article" tabindex="-1"></article></div><div class="reading-track"><i id="progress"></i></div></section>
   <dialog id="index-dialog" aria-labelledby="index-heading"><header class="dialog-header"><div><span class="eyebrow">HANSEN LAB / ARCHIVE INDEX</span><h2 id="index-heading">文章目录<span>40</span></h2></div><button data-action="close" aria-label="关闭目录">✕</button></header><label class="search-field"><span>⌕</span><input id="search" type="search" placeholder="搜索标题、标签、关键词…" autocomplete="off" aria-label="搜索文章"><kbd>ESC</kbd></label><div id="filters" class="filters"></div><div class="index-info"><span id="result-count" role="status"></span><span>全部为演示内容</span></div><div id="results"></div></dialog>
@@ -184,7 +188,7 @@ document.querySelectorAll<HTMLDialogElement>("dialog").forEach((dialog) => {
     dialog.close();
   });
   dialog.addEventListener("close", () => {
-    $("#home").inert = reading;
+    $("#home").inert = reading || bootActive;
     $("#reader").inert = !reading;
     drawerReturn?.focus({ preventScroll: true });
     resumeScene();
@@ -218,7 +222,7 @@ function applyRoute() {
     reading = false;
     $("#reader").hidden = true;
     $("#reader").inert = true;
-    $("#home").inert = false;
+    $("#home").inert = bootActive;
     document.title = "Hansen Lab · 个人研究与实践档案";
     scene?.setMode("archive");
     $("#home").classList.remove("reading");
@@ -229,6 +233,7 @@ function applyRoute() {
   if (!reading) articleReturn = document.activeElement as HTMLElement;
   reading = true;
   closeDialogs();
+  if (bootActive) boot.direct();
   const delay = ready && !reduced && $("#reader").hidden ? 1100 : 0;
   $("#reader").inert = false;
   $("#home").inert = true;
@@ -268,6 +273,14 @@ document.addEventListener("click", async (event) => {
   const target = event.target as Element;
   const actionElement = target.closest<HTMLElement>("[data-action]");
   const action = actionElement?.dataset.action;
+  if (action === "replay" && ready && !reading) {
+    bootActive = true;
+    $("#home").dataset.ready = "false";
+    $("#home").dataset.booting = "true";
+    $("#home").inert = true;
+    pauseScene();
+    boot.replay();
+  }
   if (action === "index") showIndex();
   if (action === "projects") showIndex("项目实践");
   if (action === "about") openDialog("#about-dialog");
@@ -329,6 +342,21 @@ document.addEventListener("click", async (event) => {
 });
 document.addEventListener("keydown", (event) => {
   if (document.querySelector("dialog[open]")) return;
+  if (bootActive) {
+    if (
+      event.key === "Escape" ||
+      (event.key === "Enter" &&
+        !(event.target as HTMLElement).closest("button"))
+    ) {
+      event.preventDefault();
+      boot.skip();
+    }
+    if (event.key === "/") {
+      event.preventDefault();
+      boot.browse();
+    }
+    return;
+  }
   if (
     (event.target as HTMLElement).matches("input, textarea, [contenteditable]")
   )
@@ -363,6 +391,7 @@ document.addEventListener("keydown", (event) => {
 
 function syncMotion() {
   scene?.setReduced(reduced);
+  boot?.setReduced(reduced);
   document.documentElement.dataset.reduced = String(reduced);
   $("#motion").textContent = `动效 ${reduced ? "关" : "开"}`;
   $("#motion").setAttribute("aria-pressed", String(!reduced));
@@ -378,6 +407,7 @@ function frame(ms: number) {
   sceneFrame = 0;
   if (
     !document.hidden &&
+    !bootActive &&
     (profileBaseline ? !reading || ms - lastFrame < 1800 : canRenderScene())
   ) {
     const start = import.meta.env.DEV ? performance.now() : 0;
@@ -405,6 +435,7 @@ function frame(ms: number) {
 function canRenderScene() {
   return (
     !document.hidden &&
+    !bootActive &&
     !document.querySelector("dialog[open]") &&
     (!reading || $("#reader").hidden)
   );
@@ -426,6 +457,23 @@ document.addEventListener("visibilitychange", () => {
 });
 window.addEventListener("resize", () => scene?.resize());
 
+function handleSceneFailure(error: unknown) {
+  console.error("Hansen Lab 3D load failed", error);
+  scene?.dispose();
+  scene = undefined;
+  sceneFailed = true;
+  ready = false;
+  boot.fail();
+  $("#loading").hidden = !boot.element.hidden;
+  $("#loading p").textContent = "三维档案暂时无法载入，可以先浏览文章目录。";
+  $("#loading").insertAdjacentHTML(
+    "beforeend",
+    '<button data-action="retry">重新载入三维场景 ↻</button>',
+  );
+  $("#home").dataset.ready = "false";
+  $<HTMLButtonElement>("#replay").disabled = true;
+}
+
 async function init() {
   syncSelection();
   syncMotion();
@@ -444,27 +492,35 @@ async function init() {
     scene.setQuality({ ...qualityPresets[qualityMode] });
     scene.setReduced(reduced);
     await scene.load();
-    await document.fonts.ready;
+    await new Promise<void>((resolve) => {
+      const timeout = setTimeout(resolve, 2500);
+      void document.fonts.ready.then(() => {
+        clearTimeout(timeout);
+        resolve();
+      });
+    });
     scene.setMode(reading ? "detail" : "archive");
     scene.select(selected);
     scene.revealImmediately();
     scene.onSelect = (index, cell) => {
-      if (!reading && !document.querySelector("dialog[open]"))
+      if (!bootActive && !reading && !document.querySelector("dialog[open]"))
         select(index, cell ? { cell } : undefined);
     };
     scene.onNavigate = (axis, direction) => {
-      if (!reading && !document.querySelector("dialog[open]"))
+      if (!bootActive && !reading && !document.querySelector("dialog[open]"))
         navigate(axis, direction);
     };
     scene.onHover = (index) => {
       $("#hover").hidden =
         index === null ||
+        bootActive ||
         reading ||
         Boolean(document.querySelector("dialog[open]"));
       if (index !== null)
         $("#hover").textContent = `${posts[index].id} / ${posts[index].title}`;
     };
     ready = true;
+    $<HTMLButtonElement>("#replay").disabled = false;
     if (import.meta.env.DEV) {
       const gl = scene.renderer.getContext();
       const debug = gl.getExtension("WEBGL_debug_renderer_info");
@@ -484,18 +540,12 @@ async function init() {
         },
       });
     }
-    $("#home").dataset.ready = "true";
+    $("#home").dataset.ready = String(!bootActive && boot.element.hidden);
     $("#loading").hidden = true;
+    boot.ready();
     resumeScene();
   } catch (error) {
-    console.error("Hansen Lab 3D load failed", error);
-    scene?.dispose();
-    scene = undefined;
-    $("#loading p").textContent = "三维档案暂时无法载入，可以先浏览文章目录。";
-    $("#loading").insertAdjacentHTML(
-      "beforeend",
-      '<button data-action="retry">重新载入三维场景 ↻</button>',
-    );
+    handleSceneFailure(error);
   }
 }
 document.addEventListener(
@@ -508,9 +558,39 @@ document.addEventListener(
   },
   { passive: true },
 );
+boot = new BlogBoot($("#app"), {
+  reduced,
+  onReveal: () => {
+    if (ready && scene && !reading) {
+      try {
+        scene.resetFrameClock();
+        scene.update(performance.now() / 1000);
+      } catch (error) {
+        handleSceneFailure(error);
+      }
+    }
+    bootActive = false;
+    $("#home").dataset.booting = "false";
+    resumeScene();
+  },
+  onFinish: (destination) => {
+    $("#home").dataset.ready = String(ready);
+    $("#home").inert =
+      reading || Boolean(document.querySelector("dialog[open]"));
+    $("#reader").inert = !reading;
+    if (sceneFailed) $("#loading").hidden = false;
+    if (!reading && !document.querySelector("dialog[open]"))
+      $(".wordmark").focus({ preventScroll: true });
+    if (destination === "index") showIndex();
+    resumeScene();
+  },
+});
+$("#home").inert = true;
+$("#home").dataset.booting = "true";
 void init();
 if (import.meta.hot)
   import.meta.hot.dispose(() => {
     cancelAnimationFrame(sceneFrame);
+    boot.dispose();
     scene?.dispose();
   });

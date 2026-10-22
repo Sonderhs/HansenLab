@@ -1,4 +1,4 @@
-;async (page) => {
+async (page) => {
   const cdp = await page.context().newCDPSession(page)
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 667,
@@ -7,6 +7,8 @@
     mobile: false,
   })
   await page.goto("http://127.0.0.1:5175/?profile=1")
+  await page.locator('#boot-intro').waitFor({ state: 'attached' })
+  if (await page.locator('[data-intro-skip]').isVisible()) await page.locator('[data-intro-skip]').click()
   await page.locator('#home[data-ready="true"]').waitFor()
   return await page.evaluate(async () => {
     const { scene, pause } = window.hansenProfile

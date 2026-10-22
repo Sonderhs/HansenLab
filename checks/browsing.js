@@ -1,4 +1,4 @@
-;async (page) => {
+async (page) => {
   const checks = []
   const errors = []
   page.on("pageerror", (error) => errors.push(String(error)))
@@ -8,6 +8,8 @@
   }
   await page.setViewportSize({ width: 1600, height: 900 })
   await page.goto("http://127.0.0.1:5175/")
+  await page.locator('#boot-intro').waitFor({ state: 'attached' })
+  if (await page.locator('[data-intro-skip]').isVisible()) await page.locator('[data-intro-skip]').click()
   await page.locator('#home[data-ready="true"]').waitFor()
   await page.mouse.move(1550, 10)
   check((await page.locator("#scene canvas").count()) === 1, "3D canvas loaded")
@@ -140,6 +142,8 @@
   await page.setViewportSize({ width: 1600, height: 900 })
   await page.emulateMedia({ reducedMotion: "no-preference" })
   await page.goto("http://127.0.0.1:5175/")
+  await page.locator('#boot-intro').waitFor({ state: 'attached' })
+  if (await page.locator('[data-intro-skip]').isVisible()) await page.locator('[data-intro-skip]').click()
   await page.locator('#home[data-ready="true"]').waitFor()
   await page.mouse.move(1550, 10)
   check(errors.length === 0, "No JavaScript errors")

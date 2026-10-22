@@ -1,4 +1,4 @@
-;async (page) => {
+async (page) => {
   const cdp = await page.context().newCDPSession(page)
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: 667,
@@ -9,6 +9,8 @@
   const results = []
   for (const variant of ["baseline", "1", "baseline", "1"]) {
     await page.goto(`http://127.0.0.1:5175/?profile=${variant}`)
+    await page.locator('#boot-intro').waitFor({ state: 'attached' })
+    if (await page.locator('[data-intro-skip]').isVisible()) await page.locator('[data-intro-skip]').click()
     await page.locator('#home[data-ready="true"]').waitFor()
     await page.mouse.move(650, 10)
     await page.waitForTimeout(3000)
