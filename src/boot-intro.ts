@@ -117,6 +117,34 @@ export class BlogBoot {
       },
       { signal },
     );
+    const unlockOpening = (event: Event) => {
+      if (
+        !event.isTrusted ||
+        this.finished ||
+        this.closing ||
+        this.skipped ||
+        this.failed ||
+        this.reduced ||
+        !this.audio.enabled ||
+        this.audio.playing ||
+        (event.target as Element).closest("button, a, input, textarea") ||
+        (event instanceof KeyboardEvent &&
+          ["Escape", "Enter", "/"].includes(event.key))
+      )
+        return;
+      const playback = this.playbackId;
+      void this.audio.activate().then(() => {
+        if (playback === this.playbackId) this.updateSoundControl();
+      });
+    };
+    document.addEventListener("click", unlockOpening, {
+      capture: true,
+      signal,
+    });
+    document.addEventListener("keydown", unlockOpening, {
+      capture: true,
+      signal,
+    });
     window.addEventListener("resize", () => this.resize(), { signal });
     document.addEventListener(
       "visibilitychange",
@@ -141,6 +169,12 @@ export class BlogBoot {
     this.render(START);
     this.updateSoundControl();
     this.schedule();
+    if (!this.reduced && !location.hash.startsWith("#post/")) {
+      const playback = this.playbackId;
+      void this.audio.activate(true).then(() => {
+        if (playback === this.playbackId) this.updateSoundControl();
+      });
+    }
   }
   toggleSoundPreference() {
     this.audio.setEnabled(!this.audio.enabled);
@@ -155,7 +189,9 @@ export class BlogBoot {
       ? "音效 开"
       : this.audio.stats().error
         ? "重试音效并重播"
-        : "开启音效并重播";
+        : this.audio.enabled
+          ? "有声重播"
+          : "开启音效并重播";
     button.hidden = this.reduced || this.failed || this.skipped;
     this.find<HTMLElement>("[data-intro-audio-note]").textContent =
       this.reduced || this.failed || this.skipped
@@ -164,7 +200,9 @@ export class BlogBoot {
           ? "原版开场音效 · 可点击静音"
           : this.audio.stats().error
             ? "声音暂不可用，仍可无声浏览"
-            : "音效需点击开启";
+            : this.audio.enabled
+              ? "音效已开启，点击页面播放"
+              : "音效已关闭";
     const homeButton = document.querySelector<HTMLButtonElement>("#boot-sound");
     if (homeButton) {
       homeButton.textContent = `音效 ${this.audio.enabled ? "开" : "关"}`;

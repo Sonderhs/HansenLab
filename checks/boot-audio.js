@@ -28,11 +28,11 @@ async (page) => {
   await page.emulateMedia({reducedMotion:'no-preference'});
   await page.setViewportSize({width:1600,height:900});
   await page.goto('http://127.0.0.1:5175/?profile=1');
-  await page.evaluate(()=>localStorage.removeItem('hansen.boot-sound'));
+  await page.evaluate(()=>localStorage.setItem('hansen.boot-sound','off'));
   await page.reload();
   await page.waitForFunction(()=>Boolean(window.hansenProfile?.bootAudio));
   const stats=()=>page.evaluate(()=>window.hansenProfile.bootAudio.stats());
-  check((await stats()).state==='locked'&&await page.evaluate(()=>audioProbe.length===0),'Initial opening does not create or autoplay an audio device');
+  check((await stats()).state==='locked'&&await page.evaluate(()=>audioProbe.length===0),'Saved mute prevents creating or autoplaying an audio device');
   await page.locator('[data-intro-sound]').click();
   await page.waitForFunction(()=>window.hansenProfile.bootAudio.stats().played.key>1);
   check((await stats()).state==='running','Explicit sound click unlocks Web Audio');
@@ -51,8 +51,7 @@ async (page) => {
   await page.waitForFunction(()=>window.hansenProfile.bootAudio.stats().active&&window.hansenProfile.bootAudio.stats().state==='running');
   check(await page.locator('[data-intro-sound]').getAttribute('aria-pressed')==='true','Footer replay restores saved sound preference');
   await page.waitForTimeout(350);
-  const keysBefore=(await stats()).played.key;
-  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'))});
+  const keysBefore=await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'));return window.hansenProfile.bootAudio.stats().played.key});
   await page.waitForTimeout(200);
   check((await stats()).state==='suspended'&&!(await stats()).active,'Hidden opening suspends the audio device');
   await page.waitForTimeout(400);
@@ -71,8 +70,8 @@ async (page) => {
   check(!(await stats()).active&&(await stats()).voices===0&&JSON.stringify((await stats()).played)===JSON.stringify(stopped.played),'Skipping stops sound without replaying skipped cues');
   await page.reload();
   await page.waitForFunction(()=>Boolean(window.hansenProfile?.bootAudio));
-  check((await stats()).enabled&&(await stats()).state==='locked','Saved preference still requires a gesture on a fresh page');
-  await page.locator('[data-intro-sound]').click();
+  check((await stats()).enabled&&['running','suspended'].includes((await stats()).state),'Saved enabled preference attempts automatic playback on a fresh page');
+  if (!(await stats()).active) await page.locator('[data-intro-sound]').click();
   await page.waitForFunction(()=>window.hansenProfile.bootAudio.stats().state==='running');
   await page.getByRole('button',{name:'先浏览文章目录',exact:true}).click();
   await page.getByRole('dialog',{name:/文章目录/}).waitFor();

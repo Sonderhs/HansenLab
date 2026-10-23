@@ -23,8 +23,10 @@ async (page) => {
   await page.emulateMedia({reducedMotion:'no-preference'});
   await page.setViewportSize({width:1600,height:900});
   await page.goto('http://127.0.0.1:4185/?profile=1');
+  await page.evaluate(()=>localStorage.setItem('hansen.boot-sound','off'));
+  await page.reload();
   await page.locator('[data-intro-sound]').waitFor();
-  check(await page.evaluate(()=>audioProbe.length===0&&typeof window.hansenProfile==='undefined'),'Production starts silent and exposes no developer probe');
+  check(await page.evaluate(()=>audioProbe.length===0&&typeof window.hansenProfile==='undefined'),'Production respects saved mute and exposes no developer probe');
   await page.locator('[data-intro-sound]').focus();await page.keyboard.press('Enter');
   await page.waitForFunction(()=>audioProbe[0]?.peak>0.00001);
   check(await page.locator('[data-intro-sound]').getAttribute('aria-pressed')==='true','Keyboard activation produces actual sound in the production bundle');

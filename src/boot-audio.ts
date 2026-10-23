@@ -4,9 +4,9 @@ import { hasTypingBetween } from "./typing-rhythm";
 const preferenceKey = "hansen.boot-sound";
 const readPreference = () => {
   try {
-    return localStorage.getItem(preferenceKey) === "on";
+    return localStorage.getItem(preferenceKey) !== "off";
   } catch {
-    return false;
+    return true;
   }
 };
 
@@ -20,6 +20,7 @@ export class BootAudio {
   private interactionAllowed = false;
   private interactionRequest = 0;
   private active = false;
+  private unlocked = false;
   private disposed = false;
   private lastSound = new Map<Sound, number>();
   private played = new Map<Sound, number>();
@@ -36,8 +37,8 @@ export class BootAudio {
     }
     if (!value) this.stop();
   }
-  /** Call synchronously from the click before awaiting anything. */
-  async activate() {
+  /** Automatic startup may use an already allowed device; gestures can resume it. */
+  async activate(automatic = false) {
     if (!this.enabled || this.disposed || document.hidden) return false;
     this.active = true;
     let timeout: ReturnType<typeof setTimeout> | undefined;
@@ -59,6 +60,11 @@ export class BootAudio {
         limiter.connect(c.destination);
       }
       const c = this.context;
+      if (automatic && c.state !== "running") {
+        // Browser autoplay denial is an expected waiting state, not a device error.
+        this.active = false;
+        return false;
+      }
       const resumed = c.state === "running" ? Promise.resolve() : c.resume();
       // A device can finish resuming after the bounded attempt or after Skip.
       void resumed
@@ -87,6 +93,7 @@ export class BootAudio {
         return false;
       }
       this.error = c.state === "running" ? "" : "Audio is suspended";
+      if (c.state === "running") this.unlocked = true;
       return c.state === "running";
     } catch (error) {
       this.error = error instanceof Error ? error.message : "Audio unavailable";
@@ -124,7 +131,9 @@ export class BootAudio {
     });
   }
   resume() {
-    return this.context ? this.activate() : Promise.resolve(false);
+    return this.context
+      ? this.activate(!this.unlocked && !this.interactionAllowed)
+      : Promise.resolve(false);
   }
   reset() {
     this.interactionRequest++;

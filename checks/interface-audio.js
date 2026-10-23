@@ -52,7 +52,7 @@ async(page)=>{
  const muted=JSON.stringify((await stats()).played);await page.locator('[data-action="row-next"]').click();await page.getByRole('button',{name:/文章目录/}).click();await page.keyboard.press('Escape');
  check(!(await stats()).enabled&&JSON.stringify((await stats()).played)===muted,'One mute switch silences both navigation and dialogs');
  await page.locator('#boot-sound').click();await page.waitForTimeout(140);await page.reload();await page.locator('[data-intro-skip]').click();await page.locator('#home[data-ready="true"]').waitFor();
- check(await page.evaluate(()=>audioProbe.length===0),'Saved enabled preference does not autoplay a fresh page');
+ check((await stats()).enabled&&await page.evaluate(()=>audioProbe.length===1),'Saved enabled preference prepares the shared device on a fresh page');
  await page.locator('[data-action="row-next"]').click();await page.waitForFunction(()=>window.hansenProfile.audio.stats().played.tick===1);
  check(await page.evaluate(()=>audioProbe[0].context.state==='running'),'First trusted browse action restores saved sound without replaying the opening');
  await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,get:()=>true});document.dispatchEvent(new Event('visibilitychange'))});await page.waitForTimeout(150);
