@@ -23,6 +23,7 @@ import {
 } from "./data";
 import { ArticleCatalog, type CatalogPreset } from "./catalog";
 import { readerContent } from "./reader-content";
+import { archivePreview } from "./archive-preview";
 
 const $ = <T extends HTMLElement = HTMLElement>(selector: string) =>
   document.querySelector<T>(selector)!;
@@ -42,6 +43,10 @@ let sceneFailed = false;
 let boot: BlogBoot;
 let scene: ArchiveScene | undefined;
 let reading = false;
+let previewing = false;
+let previewReturn: HTMLElement | null = null;
+let previewExitTimer: ReturnType<typeof setTimeout> | undefined;
+let previewNeedsFocus = false;
 let sceneFrame = 0;
 let lastFrame = 0;
 let drawerReturn: HTMLElement | null = null;
@@ -61,12 +66,13 @@ $("#app").innerHTML = `
       <nav aria-label="主导航"><button data-action="index">文章目录 <small>INDEX</small><span class="shortcut">/</span></button><button data-action="projects">项目 <small>PROJECTS</small></button><button data-action="about">关于 <small>ABOUT</small></button></nav>
     </header>
     <div class="intro"><span class="eyebrow"><i class="signal"></i> AN OPEN-ENDED EXPERIMENT</span><p>保持好奇，持续构建。</p><span>技术笔记、项目实践与论文阅读。</span></div>
-    <section class="selection" aria-label="当前档案"><div class="eyebrow"><span id="post-category"></span><span class="selection-id" id="post-id"></span></div><h1 id="post-title"><span id="post-title-motion"></span><span id="post-title-static"></span></h1><div class="selection-rule"><i></i><span id="post-en"></span></div><p id="post-lead"></p><div class="post-meta"><time id="post-date"></time><span>／</span><span id="post-minutes"></span><span class="sample">选读 · 正文节选</span></div><a id="read" class="read-link" href="#">打开这份记录 <span>↗</span></a></section>
+    <section class="selection" aria-label="当前档案"><div class="eyebrow"><span id="post-category"></span><span class="selection-id" id="post-id"></span></div><h1 id="post-title"><span id="post-title-motion"></span><span id="post-title-static"></span></h1><div class="selection-rule"><i></i><span id="post-en"></span></div><p id="post-lead"></p><div class="post-meta"><time id="post-date"></time><span>／</span><span id="post-minutes"></span><span class="sample">选读 · 正文节选</span></div><div class="selection-actions"><button id="preview-open" data-action="preview">预览档案 <span>＋</span></button><a id="read" class="read-link" href="#">打开这份记录 <span>↗</span></a></div></section>
     <div class="archive-position"><span class="eyebrow">精选 / SELECT</span><div><span id="row-number"></span><i>/</i><small id="row-total"></small></div></div>
     <div class="lane-controls"><button data-action="lane-prev" aria-label="上一分类">←</button><div><span class="eyebrow" id="lane-number"></span><strong id="lane-title"></strong><button class="collection-open" data-action="collection">查看该集合 ↗</button></div><button data-action="lane-next" aria-label="下一分类">→</button></div>
     <div class="row-controls"><button data-action="row-prev" aria-label="上一篇">↑</button><div id="ticks"></div><button data-action="row-next" aria-label="下一篇">↓</button></div>
-    <div class="browse-hint">拖动探索 <span>／</span> 滚轮切换 <span>／</span> <kbd>↵</kbd> 打开记录</div>
+    <div class="browse-hint">拖动探索 <span>／</span> 滚轮切换 <span>／</span> 点击档案 / <kbd>↵</kbd> 预览</div>
     <footer class="home-footer"><span><i class="signal"></i> PERSONAL ARCHIVE <b>H / L</b></span><div class="display-controls"><button data-action="replay" id="replay" disabled>重播开场</button><button data-action="boot-sound" id="boot-sound" aria-pressed="false" title="统一开启或关闭开场与浏览交互音效">音效 关</button><button data-action="quality" id="quality" title="切换画质：原始保留完整光影，流畅降低三维渲染负担，文字与动效不变">画质 原始</button><button data-action="motion" id="motion" aria-pressed="${!reduced}">动效 ${reduced ? "关" : "开"}</button></div><span>CONCEPT DEMO <i>01</i></span></footer>
+    <section id="preview" aria-labelledby="preview-title" hidden inert><button class="preview-back" data-action="preview-close">← 返回档案阵列 <span>ESC</span></button><article id="preview-content"></article><p class="preview-inspect">拖动档案查看角度</p></section>
     <div id="hover" hidden></div>
     <div id="loading" role="status" hidden><span>${mark}</span><b>HANSEN LAB</b><p>正在连接三维档案库…</p><i></i><button data-action="index">先浏览文章目录 →</button></div>
   </div>
@@ -146,6 +152,74 @@ function syncSelection() {
 function playUi(sound: Sound, pan = 0) {
   if (!bootActive) boot.audio.interact(sound, pan);
 }
+function syncPreviewUi() {
+  $("#home").classList.toggle("previewing", previewing);
+  scene?.resize();
+  for (const selector of [
+    ".intro",
+    ".selection",
+    ".archive-position",
+    ".lane-controls",
+    ".row-controls",
+    ".browse-hint",
+  ]) {
+    $(selector).inert = previewing;
+  }
+}
+function openPreview(index = selected, navigation?: ArchiveNavigation) {
+  if (
+    !ready ||
+    bootActive ||
+    reading ||
+    previewing ||
+    document.querySelector("dialog[open]")
+  )
+    return;
+  previewReturn = document.activeElement as HTMLElement;
+  clearTimeout(previewExitTimer);
+  select(index, navigation, false);
+  previewing = true;
+  previewNeedsFocus = true;
+  $("#preview-content").innerHTML = archivePreview(posts[selected]);
+  $("#preview-content").scrollTop = 0;
+  $("#preview").hidden = false;
+  $("#preview").inert = false;
+  $("#preview").dataset.closing = "false";
+  $("#preview").style.setProperty(
+    "--preview-visibility",
+    String(reduced ? 1 : (scene?.detailVisibility ?? 0)),
+  );
+  $("#hover").hidden = true;
+  syncPreviewUi();
+  scene?.setMode("detail");
+  playUi("open");
+  resumeScene();
+}
+function closePreview(feedback = true, restoreFocus = true) {
+  if (!previewing) return;
+  previewing = false;
+  previewNeedsFocus = false;
+  $("#preview").inert = true;
+  $("#preview").dataset.closing = "true";
+  syncPreviewUi();
+  scene?.setMode("archive");
+  if (feedback) playUi("back");
+  const finish = () => {
+    $("#preview").hidden = true;
+    if (restoreFocus) {
+      const target =
+        previewReturn?.isConnected &&
+        !previewReturn.closest("[inert]") &&
+        previewReturn !== document.body
+          ? previewReturn
+          : $("#preview-open");
+      target.focus({ preventScroll: true });
+    }
+  };
+  if (reduced) finish();
+  else previewExitTimer = setTimeout(finish, 200);
+  resumeScene();
+}
 function select(
   index: number,
   navigation?: ArchiveNavigation,
@@ -166,6 +240,7 @@ function select(
   }
 }
 function navigate(axis: "lane" | "row", direction: number) {
+  if (previewing) return;
   const { lane } = fileLocation(selected);
   if (axis === "lane") {
     const next = wrap(lane + direction, archiveColumns.length);
@@ -237,12 +312,12 @@ function applyRoute() {
   if (index < 0) {
     if (!reading) return;
     reading = false;
-    playUi("back");
+    playUi(previewing ? "page-close" : "back");
     $("#reader").hidden = true;
     $("#reader").inert = true;
     $("#home").inert = bootActive;
     document.title = "Hansen Lab · 个人研究与实践档案";
-    scene?.setMode("archive");
+    if (!previewing) scene?.setMode("archive");
     $("#home").classList.remove("reading");
     articleReturn?.focus({ preventScroll: true });
     resumeScene();
@@ -253,15 +328,18 @@ function applyRoute() {
   reading = true;
   closeDialogs();
   if (bootActive) boot.direct();
-  const delay = ready && !reduced && $("#reader").hidden ? 1100 : 0;
+  const post = articles[index];
+  const fromPreview = previewing && posts[selected].slug === post.slug;
+  if (previewing && !fromPreview) closePreview(false, false);
+  const delay =
+    ready && !reduced && !fromPreview && $("#reader").hidden ? 1100 : 0;
   $("#reader").inert = false;
   $("#home").inert = true;
   $("#home").classList.add("reading");
-  const post = articles[index];
   const appearance = appearanceFor(post.slug, fileLocation(selected).lane);
-  if (appearance >= 0) select(appearance, undefined, false);
-  playUi(wasReading ? "page-open" : "open");
-  scene?.setMode("detail");
+  if (appearance >= 0 && !fromPreview) select(appearance, undefined, false);
+  playUi(wasReading || fromPreview ? "page-open" : "open");
+  if (!fromPreview) scene?.setMode("detail");
   readerScroll = 0;
   document.title = `${post.title} · Hansen Lab`;
   const content = readerContent(post);
@@ -292,7 +370,14 @@ document.addEventListener("click", async (event) => {
   const target = event.target as Element;
   const actionElement = target.closest<HTMLElement>("[data-action]");
   const action = actionElement?.dataset.action;
+  if (action === "preview") openPreview();
+  if (action === "preview-close") closePreview();
+  if (previewing && target.closest(".wordmark")) {
+    event.preventDefault();
+    closePreview();
+  }
   if (action === "replay" && ready && !reading) {
+    closePreview(false, false);
     bootActive = true;
     $("#home").dataset.ready = "false";
     $("#home").dataset.booting = "true";
@@ -420,6 +505,19 @@ document.addEventListener("keydown", (event) => {
     return;
   }
   if (!ready) return;
+  if (previewing) {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closePreview();
+    } else if (
+      event.key === "Enter" &&
+      !(event.target as HTMLElement).closest("button, a")
+    ) {
+      event.preventDefault();
+      location.hash = `post/${posts[selected].slug}`;
+    }
+    return;
+  }
   if (
     (event.target as HTMLElement).closest("button, a") &&
     (event.key === "Enter" || event.key === " ")
@@ -435,7 +533,10 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     navigate(...keys[event.key]);
   }
-  if (event.key === "Enter") location.hash = `post/${posts[selected].slug}`;
+  if (event.key === "Enter") {
+    event.preventDefault();
+    openPreview();
+  }
 });
 
 function syncMotion() {
@@ -461,6 +562,22 @@ function frame(ms: number) {
   ) {
     const start = import.meta.env.DEV ? performance.now() : 0;
     scene?.update(ms / 1000);
+    if (previewing && scene) {
+      const visibility = reduced ? 1 : scene.detailVisibility;
+      $("#preview").style.setProperty(
+        "--preview-visibility",
+        String(visibility),
+      );
+      if (
+        previewNeedsFocus &&
+        visibility >= 0.1 &&
+        !reading &&
+        !document.querySelector("dialog[open]")
+      ) {
+        previewNeedsFocus = false;
+        $("#preview-title").focus({ preventScroll: true });
+      }
+    }
     if (import.meta.env.DEV) {
       performanceCpu += performance.now() - start;
       performanceFrames++;
@@ -558,9 +675,15 @@ async function init() {
     scene.select(selected);
     scene.revealImmediately();
     scene.onSelect = (index, cell) => {
-      if (!bootActive && !reading && !document.querySelector("dialog[open]"))
+      if (
+        !bootActive &&
+        !reading &&
+        !previewing &&
+        !document.querySelector("dialog[open]")
+      )
         select(index, cell ? { cell } : undefined);
     };
+    scene.onActivate = (index, cell) => openPreview(index, { cell });
     scene.onNavigate = (axis, direction) => {
       if (!bootActive && !reading && !document.querySelector("dialog[open]"))
         navigate(axis, direction);
@@ -570,6 +693,7 @@ async function init() {
         index === null ||
         bootActive ||
         reading ||
+        previewing ||
         Boolean(document.querySelector("dialog[open]"));
       if (index !== null)
         $("#hover").textContent = `${posts[index].id} / ${posts[index].title}`;
@@ -648,6 +772,7 @@ void init();
 if (import.meta.hot)
   import.meta.hot.dispose(() => {
     cancelAnimationFrame(sceneFrame);
+    clearTimeout(previewExitTimer);
     audioEvents.abort();
     boot.dispose();
     scene?.dispose();

@@ -28,7 +28,8 @@ npm run preview
 
 ## 使用与内容
 
-- 首页拖动、滚轮、方向键切换；Enter 打开文章；`/` 搜索，Esc 返回。
+- 首页拖动、滚轮、方向键切换；点击三维档案或按 Enter 先预览，再选择「打开这份记录」进入文章；`/` 搜索，Esc 返回。
+- 预览复用原场景的竖直抽取、镜头靠近与解密；获得净空后可拖动查看角度，旁边显示摘要、标签和章节。阅读后返回同一预览，再按 Esc 或「返回档案阵列」先转正归位；首页也保留直接阅读入口。手机预览采用上方模型、下方独立滚动信息。验证见 [verification/ARCHIVE-PREVIEW.md](verification/ARCHIVE-PREVIEW.md)。
 - `content/selection.json` 保存 18 篇原博客正文节选；来源与哈希见 `content/SOURCE.json`。
 - `src/data.ts` 分别配置唯一文章、展示集合、系列、标签别名与三维精选位置。
 - `src/catalog.ts` 管理目录筛选，`src/reader-content.ts` 管理节选阅读与系列导航。
